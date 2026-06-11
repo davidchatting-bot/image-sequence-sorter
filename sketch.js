@@ -191,7 +191,8 @@ async function applyRenames() {
   sortedGroups.forEach((group, gIdx) => {
     group.forEach(obj => {
       if (!obj.handle) return;
-      let newName = `${String(gIdx + 1).padStart(2, '0')}-${baseNameFor(obj.name)}`;
+      const base = baseNameFor(obj.name);
+      let newName = `${String(gIdx + 1).padStart(2, '0')}-${base}`;
 
       if (newName !== obj.name) {
         let candidate = newName, n = 2;
@@ -203,7 +204,10 @@ async function applyRenames() {
           n++;
         }
         newName = candidate;
-        renames.push({ obj, newName, tempName: `__tmp_${Date.now()}_${Math.floor(Math.random() * 1e9)}__${obj.name}` });
+        // Built from the (already length-capped) base, not the raw
+        // current name, so the temp name can't exceed filesystem limits
+        // even if the current name is itself extremely long.
+        renames.push({ obj, newName, tempName: `__tmp_${Date.now()}_${Math.floor(Math.random() * 1e9)}__${base}` });
       }
       usedNames.add(newName);
     });
