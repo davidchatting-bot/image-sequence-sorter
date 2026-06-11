@@ -1,3 +1,5 @@
+const VERSION = '1.0.0';
+
 let imgObjects = [];
 let groups = []; // each group is an array of image objects
 let sortedGroups = [];
@@ -305,15 +307,23 @@ function draw() {
   if (sortingDone) {
     text("Sorting complete", width / 2, 30);
     displaySortedGroups();
-    return;
-  }
-
-  if (currentComparison) {
+  } else if (currentComparison) {
     text("Which first? [A=Left, D=Right, S=Equal/Merge]", width / 2, 30);
     displayGroupsInSections([currentComparison[0], currentComparison[1]]);
   } else {
     text("Drop images to start. Press W to reset.", width / 2, height / 2);
   }
+  drawVersion();
+}
+
+function drawVersion() {
+  push();
+  textAlign(RIGHT, BOTTOM);
+  textSize(12);
+  fill(120);
+  noStroke();
+  text(`v${VERSION}`, width - 8, height - 8);
+  pop();
 }
 
 function displayGroupsInSections(groupArray) {
