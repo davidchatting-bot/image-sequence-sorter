@@ -1,17 +1,13 @@
-let images = [];
 let imgObjects = [];
-let sequences = [[]]; // each sequence is an array of groups, each group is an array of image objects
-let currentSequence = 0;
-let sortedSequences = [];
+let groups = []; // each group is an array of image objects
+let sortedGroups = [];
 let sortingDone = false;
 
-// Sorting state within a sequence
-let sortedGroups = [];
+// Sorting state
 let currentGroupIndex = 0;
 let lo = 0, hi = -1, mid = -1;
 let candidateGroup = null;
 let currentComparison = null;
-let comparisonCount = 0;
 
 // UI Elements
 let fileInput, restartBtn, mvBox;
@@ -78,21 +74,21 @@ function onNativeDrop(e) {
   }
 }
 
-function startSortingCurrentSequence() {
+function startSorting() {
   if (sortingDone) return;
-  if (!sequences[currentSequence] || sequences[currentSequence].length === 0) return;
+  if (groups.length === 0) return;
 
-  sortedGroups = [sequences[currentSequence][0]];
+  sortedGroups = [groups[0]];
   currentGroupIndex = 1;
-  if (sequences[currentSequence].length === 1) {
-    finishCurrentSequence();
+  if (groups.length === 1) {
+    finishSorting();
   } else {
     beginBinarySearchForCurrentGroup();
   }
 }
 
 function beginBinarySearchForCurrentGroup() {
-  candidateGroup = sequences[currentSequence][currentGroupIndex];
+  candidateGroup = groups[currentGroupIndex];
   lo = 0;
   hi = sortedGroups.length - 1;
   nextComparison();
@@ -102,8 +98,8 @@ function nextComparison() {
   if (lo > hi) {
     sortedGroups.splice(lo, 0, candidateGroup);
     currentGroupIndex++;
-    if (currentGroupIndex >= sequences[currentSequence].length) {
-      finishCurrentSequence();
+    if (currentGroupIndex >= groups.length) {
+      finishSorting();
     } else {
       beginBinarySearchForCurrentGroup();
     }
@@ -113,37 +109,27 @@ function nextComparison() {
   currentComparison = [sortedGroups[mid], candidateGroup];
 }
 
-function finishCurrentSequence() {
-  sortedSequences[currentSequence] = sortedGroups.slice();
-  currentComparison = null;
-  console.log(`Finished sequence ${currentSequence + 1}`);
-}
-
-function finishAll() {
+function finishSorting() {
   sortingDone = true;
+  currentComparison = null;
   generateUnixCommand();
 }
 
 function generateUnixCommand() {
-  let cmds = sortedSequences.map((seq, sIdx) => {
-    let folder = `seq${String(sIdx + 1).padStart(2, '0')}`;
-    let header = `mkdir -p "${folder}"`;
-    let moves = seq.map((group, gIdx) => {
-      return group.map(obj => {
-        let base = obj.name.replace(/^\d{2}-/, '');
-        if (base.length > 100) {
-          const extIndex = base.lastIndexOf('.');
-          const ext = extIndex >= 0 ? base.slice(extIndex) : '';
-          base = base.slice(0, 100 - ext.length) + ext;
-        }
-        let newName = `${String(gIdx + 1).padStart(2, '0')}-${base}`;
-        return `mv "${obj.name}" "${folder}/${newName}"`;
-      }).join(' ; ');
+  let cmds = sortedGroups.map((group, gIdx) => {
+    return group.map(obj => {
+      let base = obj.name.replace(/^\d{2}-/, '');
+      if (base.length > 100) {
+        const extIndex = base.lastIndexOf('.');
+        const ext = extIndex >= 0 ? base.slice(extIndex) : '';
+        base = base.slice(0, 100 - ext.length) + ext;
+      }
+      let newName = `${String(gIdx + 1).padStart(2, '0')}-${base}`;
+      return `mv "${obj.name}" "${newName}"`;
     }).join(' ; ');
-    return `${header} ; ${moves}`;
   }).join(' ; ');
 
-  console.log("Unix rename/move command:", cmds);
+  console.log("Unix rename command:", cmds);
   if (mvBox) mvBox.value(cmds);
 }
 
@@ -152,27 +138,15 @@ function keyPressed() {
     startOver();
     return;
   }
-  if (key === 'X' || key === 'x') {
-    if (sortedGroups.length > 0) sortedSequences[currentSequence] = sortedGroups.slice();
-    currentSequence++;
-    sequences[currentSequence] = [];
-    sortedGroups = [];
-    currentGroupIndex = 0;
-    currentComparison = null;
-    return;
-  }
   if (!currentComparison) return;
 
   if (key === 'A' || key === 'a') {
-    comparisonCount++;
     lo = mid + 1;
     nextComparison();
   } else if (key === 'D' || key === 'd') {
-    comparisonCount++;
     hi = mid - 1;
     nextComparison();
   } else if (key === 'S' || key === 's') {
-    comparisonCount++;
     mergeGroups();
     advanceGroupIndex();
   }
@@ -185,8 +159,8 @@ function mergeGroups() {
 
 function advanceGroupIndex() {
   currentGroupIndex++;
-  if (currentGroupIndex >= sequences[currentSequence].length) {
-    finishCurrentSequence();
+  if (currentGroupIndex >= groups.length) {
+    finishSorting();
   } else {
     beginBinarySearchForCurrentGroup();
   }
@@ -195,17 +169,16 @@ function advanceGroupIndex() {
 function draw() {
   background(220);
   if (sortingDone) {
-    text("All sequences complete", width / 2, 30);
-    displayAllSequences();
+    text("Sorting complete", width / 2, 30);
+    displaySortedGroups();
     return;
   }
 
   if (currentComparison) {
-    text(`Sequence ${currentSequence + 1}: Which first? [A=Left, D=Right, S=Equal/Merge, X=New Seq]`, width / 2, 30);
+    text("Which first? [A=Left, D=Right, S=Equal/Merge]", width / 2, 30);
     displayGroupsInSections([currentComparison[0], currentComparison[1]]);
   } else {
-    text("Drop images to start. Press W to reset, X for new sequence.", width / 2, height / 2);
-    if (sequences[currentSequence].length === 0 && currentSequence > 0) finishAll();
+    text("Drop images to start. Press W to reset.", width / 2, height / 2);
   }
 }
 
@@ -236,16 +209,10 @@ function displayImageFull(imgObj, xStart, wSection, hCanvas, offsetX = 0) {
   }
 }
 
-function displayAllSequences() {
-  let rowHeight = height / sortedSequences.length;
-  for (let s = 0; s < sortedSequences.length; s++) {
-    let seq = sortedSequences[s];
-    let sectionWidth = width / seq.length;
-    for (let g = 0; g < seq.length; g++) {
-      if (seq[g].length > 0) displayImageFull(seq[g][0], g * sectionWidth, sectionWidth, rowHeight, 0);
-    }
-    fill(0);
-    text(`Seq ${s + 1}`, 30, s * rowHeight + 20);
+function displaySortedGroups() {
+  let sectionWidth = width / sortedGroups.length;
+  for (let g = 0; g < sortedGroups.length; g++) {
+    if (sortedGroups[g].length > 0) displayImageFull(sortedGroups[g][0], g * sectionWidth, sectionWidth, height, 0);
   }
 }
 
@@ -275,18 +242,14 @@ function mouseReleased() {
 }
 
 function startOver() {
-  images = [];
   imgObjects = [];
-  sequences = [[]];
-  currentSequence = 0;
-  sortedSequences = [];
+  groups = [];
   sortedGroups = [];
   sortingDone = false;
   currentGroupIndex = 0;
   lo = 0; hi = -1; mid = -1;
   candidateGroup = null;
   currentComparison = null;
-  comparisonCount = 0;
   panOffsets = new Map();
   if (fileInput && fileInput.elt) fileInput.elt.value = '';
   if (mvBox) mvBox.value('');
@@ -305,9 +268,8 @@ function addImage(file) {
   let obj = { img, name: f.name };
   imgObjects.push(obj);
 
-  if (!sequences[currentSequence]) sequences[currentSequence] = [];
-  sequences[currentSequence].push([obj]);
+  groups.push([obj]);
 
-  if (imgObjects.length > 1) startSortingCurrentSequence();
+  if (groups.length > 1) startSorting();
   console.log("Added image:", f.name);
 }

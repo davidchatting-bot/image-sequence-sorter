@@ -1,8 +1,8 @@
 # Image Sequence Sorter
 
-A p5.js sketch for sorting dropped-in images into ordered sequences via
-pairwise comparisons (binary insertion sort), then generating Unix
-`mkdir`/`mv` commands to reorganise the corresponding files on disk.
+A p5.js sketch for sorting dropped-in images into a single ordered sequence
+via pairwise comparisons (binary insertion sort), then generating Unix `mv`
+commands to rename the corresponding files on disk in that order.
 
 Source: https://editor.p5js.org/davidchatting/sketches/6IkZVx0a3
 
@@ -14,11 +14,10 @@ static server). Drop images onto the canvas to begin.
 - **A** — left group is first
 - **D** — right group is first
 - **S** — equal / merge groups
-- **X** — start a new sequence
 - **W** — start over
 
-Once all sequences are complete, a textarea shows the shell commands to
-move/rename the files into `seqNN/` folders.
+Once sorting is complete, a textarea shows the shell commands to rename
+the files with a zero-padded order prefix (e.g. `01-`, `02-`, ...).
 
 ## Dependencies
 
