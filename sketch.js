@@ -167,9 +167,13 @@ function showApplyButton() {
 }
 
 // Strips a leftover temp prefix from a previously-interrupted apply (if
-// any), then any existing two-digit order prefix, and caps the length.
+// any, in either the old or current format), then any existing two-digit
+// order prefix, and caps the length.
 function baseNameFor(name) {
-  let base = name.replace(/^__tmp_\d+_\d+__/, '').replace(/^\d{2}-/, '');
+  let base = name
+    .replace(/^__tmp_\d+_\d+__/, '')
+    .replace(/^__tmp\d+__/, '')
+    .replace(/^\d{2}-/, '');
   if (base.length > 100) {
     const extIndex = base.lastIndexOf('.');
     const ext = extIndex >= 0 ? base.slice(extIndex) : '';
@@ -204,10 +208,10 @@ async function applyRenames() {
           n++;
         }
         newName = candidate;
-        // Built from the (already length-capped) base, not the raw
-        // current name, so the temp name can't exceed filesystem limits
-        // even if the current name is itself extremely long.
-        renames.push({ obj, newName, tempName: `__tmp_${Date.now()}_${Math.floor(Math.random() * 1e9)}__${base}` });
+        // Short, index-based temp name (comparable in length to the "NN-"
+        // prefix being added) built from the already length-capped base,
+        // so it can't exceed filesystem name limits.
+        renames.push({ obj, newName, tempName: `__tmp${renames.length}__${base}` });
       }
       usedNames.add(newName);
     });
