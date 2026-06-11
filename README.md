@@ -27,12 +27,13 @@ the files with a zero-padded order prefix (e.g. `01-`, `02-`, ...).
 
 ### Direct rename (Chromium browsers)
 
-In browsers that support the File System Access API (Chrome, Edge, etc.),
-an "Open Folder (enables direct rename)" button is also shown. Use it
-instead of the inputs above to grant read/write access to a folder — once
-sorting is complete, an "Apply renames to folder" button appears that
-renames the files in place (no need to copy/paste shell commands). Only
-the top level of the chosen folder is read; sub-folders are ignored.
+In browsers that support the File System Access API (Chrome, Edge, etc.), a
+"Rename files in folder" button appears once sorting is complete. Clicking
+it prompts you to pick the folder the images came from and grant read/write
+access, then renames each file in place to match the sorted order (no need
+to copy/paste shell commands). Files in the picked folder that aren't part
+of the current sequence are left untouched, and any sorted files not found
+there are reported.
 
 If the browser reports that the folder's cached state is stale (this can
 happen after files have already been renamed once), you'll be prompted to

@@ -15,7 +15,7 @@ let candidateGroup = null;
 let currentComparison = null;
 
 // UI Elements
-let fileInput, folderInput, restartBtn, openFolderBtn, applyBtn, mvBox;
+let fileInput, folderInput, restartBtn, applyBtn, mvBox;
 
 // File System Access API (Chromium browsers): lets us rename files in place
 const fsAccessSupported = 'showDirectoryPicker' in window;
@@ -52,12 +52,6 @@ function setup() {
   restartBtn = createButton('Start Over (W)');
   restartBtn.mousePressed(startOver);
   restartBtn.position(10, 10);
-
-  if (fsAccessSupported) {
-    openFolderBtn = createButton('Open Folder (enables direct rename)');
-    openFolderBtn.mousePressed(openFolder);
-    openFolderBtn.position(10, 45);
-  }
 
   mvBox = createElement('textarea', '');
   mvBox.id('mvCommandBox');
@@ -142,28 +136,11 @@ function traverseEntry(entry) {
   }
 }
 
-// Open a folder with read-write access (Chromium browsers only) so the
-// resulting renames can be applied directly to disk. Top level only -
-// sub-folders are not traversed.
-async function openFolder() {
-  try {
-    dirHandle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'image-sequence-sorter' });
-  } catch (err) {
-    return; // user cancelled the picker
-  }
-  for await (const [, handle] of dirHandle.entries()) {
-    if (handle.kind !== 'file') continue;
-    const file = await handle.getFile();
-    if (!file.type.startsWith('image/')) continue;
-    addImage({ file, name: file.name, type: file.type, handle });
-  }
-}
-
 function showApplyButton() {
-  if (!dirHandle || applyBtn) return;
-  applyBtn = createButton('Apply renames to folder');
+  if (!fsAccessSupported || applyBtn) return;
+  applyBtn = createButton('Rename files in folder');
   applyBtn.mousePressed(applyRenames);
-  applyBtn.position(10, 80);
+  applyBtn.position(10, 45);
 }
 
 // Strips a leftover temp prefix from a previously-interrupted apply (if
@@ -182,19 +159,24 @@ function baseNameFor(name) {
   return base;
 }
 
-// Renames every sorted file that has a handle (i.e. came from openFolder()).
-// Done in two passes via temporary names so swapped/cyclic renames can't
-// overwrite each other. Final names are de-duplicated up front in case two
-// files would otherwise reduce to the same name.
+// Prompts for the folder containing the dropped images (just-in-time, once
+// sorting is complete), then renames every sorted file found in that folder
+// to match the sorted order. Done in two passes via temporary names so
+// swapped/cyclic renames can't overwrite each other. Final names are
+// de-duplicated up front in case two files would otherwise reduce to the
+// same name.
 async function applyRenames() {
-  if (!dirHandle) return;
+  try {
+    dirHandle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'image-sequence-sorter' });
+  } catch (err) {
+    return; // user cancelled the picker
+  }
 
   let renames = [];
   let usedNames = new Set();
 
   sortedGroups.forEach((group, gIdx) => {
     group.forEach(obj => {
-      if (!obj.handle) return;
       const base = baseNameFor(obj.name);
       let newName = `${String(gIdx + 1).padStart(2, '0')}-${base}`;
 
@@ -217,10 +199,23 @@ async function applyRenames() {
     });
   });
 
+  // Only rename files that actually exist (by name) in the chosen folder -
+  // it may not be the one the dropped images came from.
+  let toRename = [];
+  let notFound = 0;
+  for (const r of renames) {
+    try {
+      await dirHandle.getFileHandle(r.obj.name);
+      toRename.push(r);
+    } catch (err) {
+      notFound++;
+    }
+  }
+
   let renamed = 0;
   let failed = [];
 
-  for (const r of renames) {
+  for (const r of toRename) {
     try {
       await renameWithRetry(r.obj.name, r.tempName);
       r.obj.name = r.tempName;
@@ -230,11 +225,10 @@ async function applyRenames() {
       failed.push(r.obj.name);
     }
   }
-  for (const r of renames) {
+  for (const r of toRename) {
     if (r.obj.name !== r.tempName) continue; // temp rename above failed
     try {
       await renameWithRetry(r.obj.name, r.newName);
-      r.obj.handle = await dirHandle.getFileHandle(r.newName);
       r.obj.name = r.newName;
       renamed++;
     } catch (err) {
@@ -244,9 +238,9 @@ async function applyRenames() {
     }
   }
 
-  const msg = failed.length
-    ? `Renamed ${renamed} of ${renames.length} file(s). ${failed.length} failed - see console.`
-    : `Renamed ${renamed} file(s) directly in the selected folder.`;
+  let msg = `Renamed ${renamed} of ${renames.length} file(s) in the selected folder.`;
+  if (notFound) msg += ` ${notFound} not found in that folder - is it the right one?`;
+  if (failed.length) msg += ` ${failed.length} failed - see console.`;
   console.log(msg);
   if (mvBox) mvBox.value(msg);
 }
@@ -481,7 +475,7 @@ function addImage(file) {
   }
   let blobURL = URL.createObjectURL(f);
   let img = loadImage(blobURL, () => URL.revokeObjectURL(blobURL));
-  let obj = { img, name: f.name, handle: file.handle || null };
+  let obj = { img, name: f.name };
   imgObjects.push(obj);
 
   groups.push([obj]);
