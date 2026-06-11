@@ -15,7 +15,7 @@ let candidateGroup = null;
 let currentComparison = null;
 
 // UI Elements
-let fileInput, folderInput, restartBtn, mvBox;
+let fileInput, folderInput, restartBtn, mvBox, renamePrompt;
 
 // File System Access API (Chromium browsers): lets us rename files in place
 const fsAccessSupported = 'showDirectoryPicker' in window;
@@ -152,13 +152,11 @@ function baseNameFor(name) {
   return base;
 }
 
-// Renames every sorted file to match the sorted order. Done in two passes
-// via temporary names so swapped/cyclic renames can't overwrite each other.
+// Works out which sorted files need renaming to match the sorted order
+// (i.e. their current name doesn't already have the right "NN-" prefix).
 // Final names are de-duplicated up front in case two files would otherwise
-// reduce to the same name. If there's anything to rename, this pops up the
-// folder picker (just-in-time, as soon as sorting is complete) to grant
-// read/write access to the folder containing the dropped images.
-async function applyRenames() {
+// reduce to the same name.
+function computeRenames() {
   let renames = [];
   let usedNames = new Set();
 
@@ -186,8 +184,13 @@ async function applyRenames() {
     });
   });
 
-  if (renames.length === 0) return; // nothing to rename, no need to prompt
+  return renames;
+}
 
+// Prompts for the folder containing the dropped images, then renames each
+// file in `renames` in place to match the sorted order. Done in two passes
+// via temporary names so swapped/cyclic renames can't overwrite each other.
+async function applyRenames(renames) {
   try {
     dirHandle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'image-sequence-sorter' });
   } catch (err) {
@@ -312,7 +315,30 @@ function finishSorting() {
   sortingDone = true;
   currentComparison = null;
   generateUnixCommand();
-  if (fsAccessSupported) applyRenames();
+  if (fsAccessSupported) showRenamePrompt();
+}
+
+// Chrome only allows showDirectoryPicker() to be called from a click (a
+// keypress here doesn't count), so we can't pop it open directly once
+// sorting finishes via a key. Instead, show a small pop-up with a single
+// button - clicking it is the click that opens the real folder picker.
+function showRenamePrompt() {
+  if (renamePrompt) return;
+
+  const renames = computeRenames();
+  if (renames.length === 0) return; // nothing to rename, no need to prompt
+
+  renamePrompt = createDiv('');
+  renamePrompt.id('renamePrompt');
+  renamePrompt.html(`<p>Sorting complete. Rename ${renames.length} file(s) to match this order?</p>`);
+
+  const btn = createButton('Rename files in folder');
+  btn.parent(renamePrompt);
+  btn.mousePressed(() => {
+    applyRenames(renames);
+    renamePrompt.remove();
+    renamePrompt = null;
+  });
 }
 
 function generateUnixCommand() {
@@ -476,6 +502,7 @@ function startOver() {
   if (folderInput && folderInput.elt) folderInput.elt.value = '';
   if (mvBox) mvBox.value('');
   dirHandle = null;
+  if (renamePrompt) { renamePrompt.remove(); renamePrompt = null; }
   background(220);
   text("Drop images to start", width / 2, height / 2);
 }
