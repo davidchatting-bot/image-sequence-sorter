@@ -22,7 +22,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Write deployment number
-        run: echo "{\"deployment\": ${{ github.run_number }}}" > version.json
+        run: |
+          echo "{\"deployment\": ${{ github.run_number }}}" > version.json
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
