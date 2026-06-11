@@ -1,4 +1,4 @@
-const CACHE_NAME = 'image-sequence-sorter-v1';
+const CACHE_NAME = 'image-sequence-sorter-v2';
 
 const APP_SHELL = [
   '.',
@@ -30,6 +30,15 @@ self.addEventListener('activate', (event) => {
 // (including third-party CDN assets like p5.js) are cached for next time.
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+
+  // version.json is regenerated on every deploy - always go to the
+  // network so the displayed build number stays current.
+  if (new URL(event.request.url).pathname.endsWith('/version.json')) {
+    event.respondWith(
+      fetch(event.request, { cache: 'no-store' }).catch(() => caches.match(event.request))
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request).then((cached) => {

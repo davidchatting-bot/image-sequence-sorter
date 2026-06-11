@@ -34,6 +34,14 @@ sorting is complete, an "Apply renames to folder" button appears that
 renames the files in place (no need to copy/paste shell commands). Only
 the top level of the chosen folder is read; sub-folders are ignored.
 
+## Build number
+
+The bottom-right corner of the canvas shows the deployment's build number.
+It comes from `version.json`, which the GitHub Actions deploy workflow
+(`.github/workflows/deploy.yml`) generates from `github.run_number` on every
+push to `master` and publishes alongside the site. When running locally
+(no `version.json` present) it shows "dev build".
+
 ## Dependencies
 
 Loaded from CDN (jsDelivr), not vendored:

@@ -1,4 +1,7 @@
-const VERSION = '1.0.0';
+// Build/deployment number, written to version.json by the GitHub Actions
+// deploy workflow on each push (github.run_number). Falls back to "dev"
+// when running locally, where version.json doesn't exist.
+let deploymentNumber = null;
 
 let imgObjects = [];
 let groups = []; // each group is an array of image objects
@@ -60,6 +63,11 @@ function setup() {
   mvBox.id('mvCommandBox');
   mvBox.size(windowWidth - 20, 100);
   mvBox.position(10, height + 90);
+
+  fetch('version.json', { cache: 'no-store' })
+    .then(r => r.ok ? r.json() : null)
+    .then(data => { if (data && data.deployment) deploymentNumber = data.deployment; })
+    .catch(() => {});
 }
 
 function windowResized() {
@@ -322,7 +330,7 @@ function drawVersion() {
   textSize(12);
   fill(120);
   noStroke();
-  text(`v${VERSION}`, width - 8, height - 8);
+  text(deploymentNumber ? `build ${deploymentNumber}` : 'dev build', width - 8, height - 8);
   pop();
 }
 
