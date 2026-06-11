@@ -17,10 +17,12 @@ static server). Add images by:
 
 Then sort with:
 
-- **A** — left group is first
-- **D** — right group is first
+- **a** — left group is first
+- **d** — right group is first
 - **S** — equal / merge groups
-- **W** — the right-hand (candidate) image doesn't belong in the
+- **Shift+A** — the left-hand (already-placed) image doesn't belong in the
+  sequence - remove it and keep searching for the candidate among the rest
+- **Shift+D** — the right-hand (candidate) image doesn't belong in the
   sequence - drop it and move on, without merging or inserting it
 - **Esc** — start over
 

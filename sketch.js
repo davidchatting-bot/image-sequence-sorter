@@ -334,20 +334,35 @@ function keyPressed() {
   }
   if (!currentComparison) return;
 
-  if (key === 'A' || key === 'a') {
+  if (key === 'a') {
     lo = mid + 1;
     nextComparison();
-  } else if (key === 'D' || key === 'd') {
+  } else if (key === 'd') {
     hi = mid - 1;
     nextComparison();
   } else if (key === 'S' || key === 's') {
     mergeGroups();
     advanceGroupIndex();
-  } else if (key === 'W' || key === 'w') {
-    // Candidate (right) doesn't belong in the sequence - drop it without
-    // merging or inserting, then move on to the next image.
-    advanceGroupIndex();
+  } else if (key === 'A') {
+    discardLeft();
+  } else if (key === 'D') {
+    discardRight();
   }
+}
+
+// Shift+A: the left image (already placed in sortedGroups) doesn't belong
+// in the sequence - remove it and keep searching for the candidate among
+// what remains.
+function discardLeft() {
+  sortedGroups.splice(mid, 1);
+  hi--;
+  nextComparison();
+}
+
+// Shift+D: the right image (the candidate) doesn't belong in the sequence -
+// drop it without merging or inserting, then move on to the next image.
+function discardRight() {
+  advanceGroupIndex();
 }
 
 function mergeGroups() {
@@ -370,7 +385,7 @@ function draw() {
     text("Sorting complete", width / 2, 30);
     displaySortedGroups();
   } else if (currentComparison) {
-    text("Which first? [A=Left, D=Right, S=Equal/Merge, W=Discard right]", width / 2, 30);
+    text("Which first? [a=Left, d=Right, S=Merge, A=Discard left, D=Discard right]", width / 2, 30);
     displayGroupsInSections([currentComparison[0], currentComparison[1]]);
   } else {
     text("Drop images to start. Press Esc to reset.", width / 2, height / 2);
