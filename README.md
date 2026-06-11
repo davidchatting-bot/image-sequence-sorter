@@ -34,6 +34,10 @@ sorting is complete, an "Apply renames to folder" button appears that
 renames the files in place (no need to copy/paste shell commands). Only
 the top level of the chosen folder is read; sub-folders are ignored.
 
+If the browser reports that the folder's cached state is stale (this can
+happen after files have already been renamed once), you'll be prompted to
+pick the folder again - choose the same folder to continue.
+
 ## Build number
 
 The bottom-right corner of the canvas shows the deployment's build number.

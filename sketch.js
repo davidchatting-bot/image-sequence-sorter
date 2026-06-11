@@ -147,7 +147,7 @@ function traverseEntry(entry) {
 // sub-folders are not traversed.
 async function openFolder() {
   try {
-    dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    dirHandle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'image-sequence-sorter' });
   } catch (err) {
     return; // user cancelled the picker
   }
@@ -214,9 +214,10 @@ async function applyRenames() {
 
   for (const r of renames) {
     try {
-      await renameHandle(dirHandle, r.obj.name, r.tempName);
+      await renameWithRetry(r.obj.name, r.tempName);
       r.obj.name = r.tempName;
     } catch (err) {
+      if (err.name === 'AbortError') break; // user cancelled the re-pick prompt
       console.error(`Failed to rename ${r.obj.name} to a temporary name:`, err);
       failed.push(r.obj.name);
     }
@@ -224,11 +225,12 @@ async function applyRenames() {
   for (const r of renames) {
     if (r.obj.name !== r.tempName) continue; // temp rename above failed
     try {
-      await renameHandle(dirHandle, r.obj.name, r.newName);
+      await renameWithRetry(r.obj.name, r.newName);
       r.obj.handle = await dirHandle.getFileHandle(r.newName);
       r.obj.name = r.newName;
       renamed++;
     } catch (err) {
+      if (err.name === 'AbortError') break;
       console.error(`Failed to rename ${r.obj.name} to ${r.newName}:`, err);
       failed.push(r.obj.name);
     }
@@ -239,6 +241,20 @@ async function applyRenames() {
     : `Renamed ${renamed} file(s) directly in the selected folder.`;
   console.log(msg);
   if (mvBox) mvBox.value(msg);
+}
+
+// Renames oldName -> newName via dirHandle. Chromium can throw
+// InvalidStateError ("state cached ... had changed since it was read from
+// disk") once a directory handle has been used for prior renames - if so,
+// re-prompt for the same folder to get a fresh handle and retry once.
+async function renameWithRetry(oldName, newName) {
+  try {
+    await renameHandle(dirHandle, oldName, newName);
+  } catch (err) {
+    if (err.name !== 'InvalidStateError') throw err;
+    dirHandle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'image-sequence-sorter' });
+    await renameHandle(dirHandle, oldName, newName);
+  }
 }
 
 // Renames a file in `dir` from `oldName` to `newName`, fetching a fresh
