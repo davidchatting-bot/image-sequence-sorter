@@ -25,6 +25,15 @@ Then sort with:
 Once sorting is complete, a textarea shows the shell commands to rename
 the files with a zero-padded order prefix (e.g. `01-`, `02-`, ...).
 
+### Direct rename (Chromium browsers)
+
+In browsers that support the File System Access API (Chrome, Edge, etc.),
+an "Open Folder (enables direct rename)" button is also shown. Use it
+instead of the inputs above to grant read/write access to a folder — once
+sorting is complete, an "Apply renames to folder" button appears that
+renames the files in place (no need to copy/paste shell commands). Only
+the top level of the chosen folder is read; sub-folders are ignored.
+
 ## Dependencies
 
 Loaded from CDN (jsDelivr), not vendored:

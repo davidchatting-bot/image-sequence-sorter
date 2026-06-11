@@ -10,7 +10,11 @@ let candidateGroup = null;
 let currentComparison = null;
 
 // UI Elements
-let fileInput, folderInput, restartBtn, mvBox;
+let fileInput, folderInput, restartBtn, openFolderBtn, applyBtn, mvBox;
+
+// File System Access API (Chromium browsers): lets us rename files in place
+const fsAccessSupported = 'showDirectoryPicker' in window;
+let dirHandle = null;
 
 // Pan state
 let panOffsets = new Map();
@@ -43,6 +47,12 @@ function setup() {
   restartBtn = createButton('Start Over (W)');
   restartBtn.mousePressed(startOver);
   restartBtn.position(10, 10);
+
+  if (fsAccessSupported) {
+    openFolderBtn = createButton('Open Folder (enables direct rename)');
+    openFolderBtn.mousePressed(openFolder);
+    openFolderBtn.position(10, 45);
+  }
 
   mvBox = createElement('textarea', '');
   mvBox.id('mvCommandBox');
@@ -96,7 +106,8 @@ function onNativeDrop(e) {
   }
 }
 
-// Recursively walk a dropped file/folder (FileSystemEntry API).
+// Walk a dropped file or folder (FileSystemEntry API), one level deep only
+// (sub-folders inside a dropped folder are not traversed).
 function traverseEntry(entry) {
   if (entry.isFile) {
     entry.file(f => {
@@ -107,12 +118,93 @@ function traverseEntry(entry) {
     const readNextBatch = () => {
       reader.readEntries(entries => {
         if (!entries.length) return;
-        entries.forEach(traverseEntry);
+        for (const e of entries) {
+          if (e.isFile) {
+            e.file(f => {
+              if (f.type && f.type.startsWith('image/')) handleFileSelect({ file: f, name: f.name, type: f.type });
+            });
+          }
+        }
         readNextBatch(); // readEntries() may not return everything in one call
       });
     };
     readNextBatch();
   }
+}
+
+// Open a folder with read-write access (Chromium browsers only) so the
+// resulting renames can be applied directly to disk. Top level only -
+// sub-folders are not traversed.
+async function openFolder() {
+  try {
+    dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+  } catch (err) {
+    return; // user cancelled the picker
+  }
+  for await (const [, handle] of dirHandle.entries()) {
+    if (handle.kind !== 'file') continue;
+    const file = await handle.getFile();
+    if (!file.type.startsWith('image/')) continue;
+    addImage({ file, name: file.name, type: file.type, handle });
+  }
+}
+
+function showApplyButton() {
+  if (!dirHandle || applyBtn) return;
+  applyBtn = createButton('Apply renames to folder');
+  applyBtn.mousePressed(applyRenames);
+  applyBtn.position(10, 80);
+}
+
+// Renames every sorted file that has a handle (i.e. came from openFolder()).
+// Done in two passes via temporary names so swapped/cyclic renames can't
+// overwrite each other.
+async function applyRenames() {
+  if (!dirHandle) return;
+
+  let renames = [];
+  sortedGroups.forEach((group, gIdx) => {
+    group.forEach(obj => {
+      if (!obj.handle) return;
+      let base = obj.name.replace(/^\d{2}-/, '');
+      if (base.length > 100) {
+        const extIndex = base.lastIndexOf('.');
+        const ext = extIndex >= 0 ? base.slice(extIndex) : '';
+        base = base.slice(0, 100 - ext.length) + ext;
+      }
+      let newName = `${String(gIdx + 1).padStart(2, '0')}-${base}`;
+      if (newName !== obj.name) renames.push({ obj, newName });
+    });
+  });
+
+  for (const r of renames) {
+    const tempName = `__tmp_${Date.now()}_${Math.floor(Math.random() * 1e9)}__${r.obj.name}`;
+    r.obj.handle = await renameHandle(dirHandle, r.obj.handle, r.obj.name, tempName);
+    r.obj.name = tempName;
+  }
+  for (const r of renames) {
+    r.obj.handle = await renameHandle(dirHandle, r.obj.handle, r.obj.name, r.newName);
+    r.obj.name = r.newName;
+  }
+
+  console.log(`Renamed ${renames.length} file(s) in folder.`);
+  if (mvBox) mvBox.value(`Renamed ${renames.length} file(s) directly in the selected folder.`);
+}
+
+async function renameHandle(dir, fileHandle, oldName, newName) {
+  if (typeof fileHandle.move === 'function') {
+    await fileHandle.move(newName);
+    return fileHandle;
+  }
+  // Fallback: copy contents to a new file handle, then remove the old one.
+  const file = await fileHandle.getFile();
+  const data = await file.arrayBuffer();
+  const newHandle = await dir.getFileHandle(newName, { create: true });
+  const writable = await newHandle.createWritable();
+  await writable.write(data);
+  await writable.close();
+  await dir.removeEntry(oldName);
+  return newHandle;
 }
 
 function startSorting() {
@@ -154,6 +246,7 @@ function finishSorting() {
   sortingDone = true;
   currentComparison = null;
   generateUnixCommand();
+  showApplyButton();
 }
 
 function generateUnixCommand() {
@@ -295,6 +388,8 @@ function startOver() {
   if (fileInput && fileInput.elt) fileInput.elt.value = '';
   if (folderInput && folderInput.elt) folderInput.elt.value = '';
   if (mvBox) mvBox.value('');
+  dirHandle = null;
+  if (applyBtn) { applyBtn.remove(); applyBtn = null; }
   background(220);
   text("Drop images to start", width / 2, height / 2);
 }
@@ -307,7 +402,7 @@ function addImage(file) {
   }
   let blobURL = URL.createObjectURL(f);
   let img = loadImage(blobURL, () => URL.revokeObjectURL(blobURL));
-  let obj = { img, name: f.name };
+  let obj = { img, name: f.name, handle: file.handle || null };
   imgObjects.push(obj);
 
   groups.push([obj]);
