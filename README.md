@@ -9,7 +9,13 @@ Source: https://editor.p5js.org/davidchatting/sketches/6IkZVx0a3
 ## Usage
 
 Open `index.html` in a browser (or serve the directory with a local
-static server). Drop images onto the canvas to begin.
+static server). Add images by:
+
+- dropping image files (or a whole folder) onto the canvas, or
+- using the "Choose Files" input to pick individual images, or
+- using the "Choose Folder" input to load every image in a folder
+
+Then sort with:
 
 - **A** — left group is first
 - **D** — right group is first

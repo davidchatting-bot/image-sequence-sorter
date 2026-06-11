@@ -10,7 +10,7 @@ let candidateGroup = null;
 let currentComparison = null;
 
 // UI Elements
-let fileInput, restartBtn, mvBox;
+let fileInput, folderInput, restartBtn, mvBox;
 
 // Pan state
 let panOffsets = new Map();
@@ -27,7 +27,13 @@ function setup() {
   fileInput = createFileInput(handleFileSelect, true);
   fileInput.position(10, height + 20);
 
-  // Native drop fallback
+  // Folder picker: select a whole folder of images at once
+  folderInput = createFileInput(handleFileSelect, true);
+  folderInput.elt.setAttribute('webkitdirectory', '');
+  folderInput.elt.setAttribute('directory', '');
+  folderInput.position(10, height + 55);
+
+  // Native drop fallback (also handles dropped folders)
   const elt = document.querySelector('canvas');
   if (elt) {
     elt.addEventListener('dragover', e => e.preventDefault());
@@ -41,14 +47,15 @@ function setup() {
   mvBox = createElement('textarea', '');
   mvBox.id('mvCommandBox');
   mvBox.size(windowWidth - 20, 100);
-  mvBox.position(10, height + 60);
+  mvBox.position(10, height + 90);
 }
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
   if (restartBtn) restartBtn.position(10, 10);
   if (fileInput) fileInput.position(10, height + 20);
-  if (mvBox) mvBox.size(windowWidth - 20, 100).position(10, height + 60);
+  if (folderInput) folderInput.position(10, height + 55);
+  if (mvBox) mvBox.size(windowWidth - 20, 100).position(10, height + 90);
 }
 
 function handleFileSelect(file) {
@@ -67,10 +74,44 @@ function onNativeDrop(e) {
   e.preventDefault();
   const dt = e.dataTransfer;
   if (!dt) return;
+
+  // Use DataTransferItems (supports dropped folders) when available.
+  if (dt.items && dt.items.length) {
+    for (const item of Array.from(dt.items)) {
+      const entry = item.webkitGetAsEntry && item.webkitGetAsEntry();
+      if (entry) {
+        traverseEntry(entry);
+      } else if (item.kind === 'file') {
+        const f = item.getAsFile();
+        if (f && f.type.startsWith('image/')) handleFileSelect({ file: f, name: f.name, type: f.type });
+      }
+    }
+    return;
+  }
+
   if (dt.files && dt.files.length) {
     for (const f of Array.from(dt.files)) {
       if (f.type && f.type.startsWith('image/')) handleFileSelect({ file: f, name: f.name, type: f.type });
     }
+  }
+}
+
+// Recursively walk a dropped file/folder (FileSystemEntry API).
+function traverseEntry(entry) {
+  if (entry.isFile) {
+    entry.file(f => {
+      if (f.type && f.type.startsWith('image/')) handleFileSelect({ file: f, name: f.name, type: f.type });
+    });
+  } else if (entry.isDirectory) {
+    const reader = entry.createReader();
+    const readNextBatch = () => {
+      reader.readEntries(entries => {
+        if (!entries.length) return;
+        entries.forEach(traverseEntry);
+        readNextBatch(); // readEntries() may not return everything in one call
+      });
+    };
+    readNextBatch();
   }
 }
 
@@ -252,6 +293,7 @@ function startOver() {
   currentComparison = null;
   panOffsets = new Map();
   if (fileInput && fileInput.elt) fileInput.elt.value = '';
+  if (folderInput && folderInput.elt) folderInput.elt.value = '';
   if (mvBox) mvBox.value('');
   background(220);
   text("Drop images to start", width / 2, height / 2);
