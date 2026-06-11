@@ -15,7 +15,7 @@ let candidateGroup = null;
 let currentComparison = null;
 
 // UI Elements
-let fileInput, folderInput, restartBtn, applyBtn, mvBox;
+let fileInput, folderInput, restartBtn, mvBox;
 
 // File System Access API (Chromium browsers): lets us rename files in place
 const fsAccessSupported = 'showDirectoryPicker' in window;
@@ -49,7 +49,7 @@ function setup() {
     elt.addEventListener('drop', onNativeDrop);
   }
 
-  restartBtn = createButton('Start Over (W)');
+  restartBtn = createButton('Start Over (Esc)');
   restartBtn.mousePressed(startOver);
   restartBtn.position(10, 10);
 
@@ -136,13 +136,6 @@ function traverseEntry(entry) {
   }
 }
 
-function showApplyButton() {
-  if (!fsAccessSupported || applyBtn) return;
-  applyBtn = createButton('Rename files in folder');
-  applyBtn.mousePressed(applyRenames);
-  applyBtn.position(10, 45);
-}
-
 // Strips a leftover temp prefix from a previously-interrupted apply (if
 // any, in either the old or current format), then any existing two-digit
 // order prefix, and caps the length.
@@ -159,19 +152,13 @@ function baseNameFor(name) {
   return base;
 }
 
-// Prompts for the folder containing the dropped images (just-in-time, once
-// sorting is complete), then renames every sorted file found in that folder
-// to match the sorted order. Done in two passes via temporary names so
-// swapped/cyclic renames can't overwrite each other. Final names are
-// de-duplicated up front in case two files would otherwise reduce to the
-// same name.
+// Renames every sorted file to match the sorted order. Done in two passes
+// via temporary names so swapped/cyclic renames can't overwrite each other.
+// Final names are de-duplicated up front in case two files would otherwise
+// reduce to the same name. If there's anything to rename, this pops up the
+// folder picker (just-in-time, as soon as sorting is complete) to grant
+// read/write access to the folder containing the dropped images.
 async function applyRenames() {
-  try {
-    dirHandle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'image-sequence-sorter' });
-  } catch (err) {
-    return; // user cancelled the picker
-  }
-
   let renames = [];
   let usedNames = new Set();
 
@@ -198,6 +185,14 @@ async function applyRenames() {
       usedNames.add(newName);
     });
   });
+
+  if (renames.length === 0) return; // nothing to rename, no need to prompt
+
+  try {
+    dirHandle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'image-sequence-sorter' });
+  } catch (err) {
+    return; // user cancelled the picker
+  }
 
   // Only rename files that actually exist (by name) in the chosen folder -
   // it may not be the one the dropped images came from.
@@ -317,7 +312,7 @@ function finishSorting() {
   sortingDone = true;
   currentComparison = null;
   generateUnixCommand();
-  showApplyButton();
+  if (fsAccessSupported) applyRenames();
 }
 
 function generateUnixCommand() {
@@ -333,7 +328,7 @@ function generateUnixCommand() {
 }
 
 function keyPressed() {
-  if (key === 'W' || key === 'w') {
+  if (keyCode === ESCAPE) {
     startOver();
     return;
   }
@@ -347,6 +342,10 @@ function keyPressed() {
     nextComparison();
   } else if (key === 'S' || key === 's') {
     mergeGroups();
+    advanceGroupIndex();
+  } else if (key === 'W' || key === 'w') {
+    // Candidate (right) doesn't belong in the sequence - drop it without
+    // merging or inserting, then move on to the next image.
     advanceGroupIndex();
   }
 }
@@ -371,10 +370,10 @@ function draw() {
     text("Sorting complete", width / 2, 30);
     displaySortedGroups();
   } else if (currentComparison) {
-    text("Which first? [A=Left, D=Right, S=Equal/Merge]", width / 2, 30);
+    text("Which first? [A=Left, D=Right, S=Equal/Merge, W=Discard right]", width / 2, 30);
     displayGroupsInSections([currentComparison[0], currentComparison[1]]);
   } else {
-    text("Drop images to start. Press W to reset.", width / 2, height / 2);
+    text("Drop images to start. Press Esc to reset.", width / 2, height / 2);
   }
   drawVersion();
 }
@@ -462,7 +461,6 @@ function startOver() {
   if (folderInput && folderInput.elt) folderInput.elt.value = '';
   if (mvBox) mvBox.value('');
   dirHandle = null;
-  if (applyBtn) { applyBtn.remove(); applyBtn = null; }
   background(220);
   text("Drop images to start", width / 2, height / 2);
 }

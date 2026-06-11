@@ -20,20 +20,23 @@ Then sort with:
 - **A** — left group is first
 - **D** — right group is first
 - **S** — equal / merge groups
-- **W** — start over
+- **W** — the right-hand (candidate) image doesn't belong in the
+  sequence - drop it and move on, without merging or inserting it
+- **Esc** — start over
 
 Once sorting is complete, a textarea shows the shell commands to rename
 the files with a zero-padded order prefix (e.g. `01-`, `02-`, ...).
 
 ### Direct rename (Chromium browsers)
 
-In browsers that support the File System Access API (Chrome, Edge, etc.), a
-"Rename files in folder" button appears once sorting is complete. Clicking
-it prompts you to pick the folder the images came from and grant read/write
-access, then renames each file in place to match the sorted order (no need
-to copy/paste shell commands). Files in the picked folder that aren't part
-of the current sequence are left untouched, and any sorted files not found
-there are reported.
+In browsers that support the File System Access API (Chrome, Edge, etc.), as
+soon as sorting is complete and there's anything to rename, a folder picker
+pops up automatically. Pick the folder the images came from and grant
+read/write access, and each file is renamed in place to match the sorted
+order (no need to copy/paste shell commands). Files in the picked folder
+that aren't part of the current sequence are left untouched, and any sorted
+files not found there are reported. If nothing needs renaming, no pop-up
+appears.
 
 If the browser reports that the folder's cached state is stale (this can
 happen after files have already been renamed once), you'll be prompted to
