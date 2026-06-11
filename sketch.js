@@ -166,45 +166,89 @@ function showApplyButton() {
   applyBtn.position(10, 80);
 }
 
+// Strips a leftover temp prefix from a previously-interrupted apply (if
+// any), then any existing two-digit order prefix, and caps the length.
+function baseNameFor(name) {
+  let base = name.replace(/^__tmp_\d+_\d+__/, '').replace(/^\d{2}-/, '');
+  if (base.length > 100) {
+    const extIndex = base.lastIndexOf('.');
+    const ext = extIndex >= 0 ? base.slice(extIndex) : '';
+    base = base.slice(0, 100 - ext.length) + ext;
+  }
+  return base;
+}
+
 // Renames every sorted file that has a handle (i.e. came from openFolder()).
 // Done in two passes via temporary names so swapped/cyclic renames can't
-// overwrite each other.
+// overwrite each other. Final names are de-duplicated up front in case two
+// files would otherwise reduce to the same name.
 async function applyRenames() {
   if (!dirHandle) return;
 
   let renames = [];
+  let usedNames = new Set();
+
   sortedGroups.forEach((group, gIdx) => {
     group.forEach(obj => {
       if (!obj.handle) return;
-      let base = obj.name.replace(/^\d{2}-/, '');
-      if (base.length > 100) {
-        const extIndex = base.lastIndexOf('.');
-        const ext = extIndex >= 0 ? base.slice(extIndex) : '';
-        base = base.slice(0, 100 - ext.length) + ext;
+      let newName = `${String(gIdx + 1).padStart(2, '0')}-${baseNameFor(obj.name)}`;
+
+      if (newName !== obj.name) {
+        let candidate = newName, n = 2;
+        while (usedNames.has(candidate)) {
+          const extIndex = newName.lastIndexOf('.');
+          const ext = extIndex >= 0 ? newName.slice(extIndex) : '';
+          const stem = extIndex >= 0 ? newName.slice(0, extIndex) : newName;
+          candidate = `${stem}-${n}${ext}`;
+          n++;
+        }
+        newName = candidate;
+        renames.push({ obj, newName, tempName: `__tmp_${Date.now()}_${Math.floor(Math.random() * 1e9)}__${obj.name}` });
       }
-      let newName = `${String(gIdx + 1).padStart(2, '0')}-${base}`;
-      if (newName !== obj.name) renames.push({ obj, newName });
+      usedNames.add(newName);
     });
   });
 
+  let renamed = 0;
+  let failed = [];
+
   for (const r of renames) {
-    const tempName = `__tmp_${Date.now()}_${Math.floor(Math.random() * 1e9)}__${r.obj.name}`;
-    r.obj.handle = await renameHandle(dirHandle, r.obj.handle, r.obj.name, tempName);
-    r.obj.name = tempName;
+    try {
+      await renameHandle(dirHandle, r.obj.name, r.tempName);
+      r.obj.name = r.tempName;
+    } catch (err) {
+      console.error(`Failed to rename ${r.obj.name} to a temporary name:`, err);
+      failed.push(r.obj.name);
+    }
   }
   for (const r of renames) {
-    r.obj.handle = await renameHandle(dirHandle, r.obj.handle, r.obj.name, r.newName);
-    r.obj.name = r.newName;
+    if (r.obj.name !== r.tempName) continue; // temp rename above failed
+    try {
+      await renameHandle(dirHandle, r.obj.name, r.newName);
+      r.obj.handle = await dirHandle.getFileHandle(r.newName);
+      r.obj.name = r.newName;
+      renamed++;
+    } catch (err) {
+      console.error(`Failed to rename ${r.obj.name} to ${r.newName}:`, err);
+      failed.push(r.obj.name);
+    }
   }
 
-  console.log(`Renamed ${renames.length} file(s) in folder.`);
-  if (mvBox) mvBox.value(`Renamed ${renames.length} file(s) directly in the selected folder.`);
+  const msg = failed.length
+    ? `Renamed ${renamed} of ${renames.length} file(s). ${failed.length} failed - see console.`
+    : `Renamed ${renamed} file(s) directly in the selected folder.`;
+  console.log(msg);
+  if (mvBox) mvBox.value(msg);
 }
 
-async function renameHandle(dir, fileHandle, oldName, newName) {
+// Renames a file in `dir` from `oldName` to `newName`, fetching a fresh
+// handle by name so each step doesn't depend on a handle returned by a
+// previous move().
+async function renameHandle(dir, oldName, newName) {
+  const fileHandle = await dir.getFileHandle(oldName);
   if (typeof fileHandle.move === 'function') {
     await fileHandle.move(newName);
-    return fileHandle;
+    return;
   }
   // Fallback: copy contents to a new file handle, then remove the old one.
   const file = await fileHandle.getFile();
@@ -214,7 +258,6 @@ async function renameHandle(dir, fileHandle, oldName, newName) {
   await writable.write(data);
   await writable.close();
   await dir.removeEntry(oldName);
-  return newHandle;
 }
 
 function startSorting() {
@@ -262,13 +305,7 @@ function finishSorting() {
 function generateUnixCommand() {
   let cmds = sortedGroups.map((group, gIdx) => {
     return group.map(obj => {
-      let base = obj.name.replace(/^\d{2}-/, '');
-      if (base.length > 100) {
-        const extIndex = base.lastIndexOf('.');
-        const ext = extIndex >= 0 ? base.slice(extIndex) : '';
-        base = base.slice(0, 100 - ext.length) + ext;
-      }
-      let newName = `${String(gIdx + 1).padStart(2, '0')}-${base}`;
+      let newName = `${String(gIdx + 1).padStart(2, '0')}-${baseNameFor(obj.name)}`;
       return `mv "${obj.name}" "${newName}"`;
     }).join(' ; ');
   }).join(' ; ');
