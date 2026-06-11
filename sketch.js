@@ -197,6 +197,13 @@ async function applyRenames(renames) {
     return; // user cancelled the picker
   }
 
+  if ((await dirHandle.queryPermission({ mode: 'readwrite' })) !== 'granted') {
+    if ((await dirHandle.requestPermission({ mode: 'readwrite' })) !== 'granted') {
+      showRenameResult('Read/write permission for that folder was not granted - nothing renamed.');
+      return;
+    }
+  }
+
   // Only rename files that actually exist (by name) in the chosen folder -
   // it may not be the one the dropped images came from.
   let toRename = [];
@@ -206,6 +213,7 @@ async function applyRenames(renames) {
       await dirHandle.getFileHandle(r.obj.name);
       toRename.push(r);
     } catch (err) {
+      if (err.name !== 'NotFoundError') console.error(`Error checking for ${r.obj.name}:`, err);
       notFound++;
     }
   }
@@ -241,6 +249,24 @@ async function applyRenames(renames) {
   if (failed.length) msg += ` ${failed.length} failed - see console.`;
   console.log(msg);
   if (mvBox) mvBox.value(msg);
+  showRenameResult(msg);
+}
+
+// Shows a dismissible pop-up with the outcome of applyRenames(), so it's
+// visible even though the mv-commands textarea is below the canvas.
+function showRenameResult(msg) {
+  if (renamePrompt) { renamePrompt.remove(); renamePrompt = null; }
+
+  renamePrompt = createDiv('');
+  renamePrompt.id('renamePrompt');
+  renamePrompt.html(`<p>${msg}</p>`);
+
+  const btn = createButton('OK');
+  btn.parent(renamePrompt);
+  btn.mousePressed(() => {
+    renamePrompt.remove();
+    renamePrompt = null;
+  });
 }
 
 // Renames oldName -> newName via dirHandle. Chromium can throw
