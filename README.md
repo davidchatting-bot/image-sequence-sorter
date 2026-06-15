@@ -76,6 +76,10 @@ then loads straight into the final sorted view as above. If the remembered
 folder already has granted permission, this happens with no pop-up at all -
 the images load straight away.
 
+Loading only ever requests read access to the folder; if you then save, the
+save pop-up's button click is what prompts for the extra write access needed
+to create/overwrite `sequence.json`.
+
 In other browsers, sorting still works but `sequence.json` can't be read or
 saved - use a Chromium-based browser for that.
 

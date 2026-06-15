@@ -374,8 +374,8 @@ async function openSequenceFile(file) {
 
   // queryPermission() (unlike requestPermission() or the folder picker)
   // doesn't need a click, so if the remembered folder still has granted
-  // read/write access, load straight in with no prompt at all.
-  if (rememberedDirHandle && (await rememberedDirHandle.queryPermission({ mode: 'readwrite' })) === 'granted') {
+  // read access, load straight in with no prompt at all.
+  if (rememberedDirHandle && (await rememberedDirHandle.queryPermission({ mode: 'read' })) === 'granted') {
     await loadSequenceFromFolder(rememberedDirHandle, data);
     return;
   }
@@ -399,7 +399,7 @@ function showLoadPrompt(data) {
   const pickAndLoad = async () => {
     let handle;
     try {
-      handle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'image-sequence-sorter' });
+      handle = await window.showDirectoryPicker({ mode: 'read', id: 'image-sequence-sorter' });
     } catch (err) {
       return; // user cancelled the picker
     }
@@ -430,9 +430,9 @@ function showLoadPrompt(data) {
 // then arranges them via applyPendingSequence() - going straight to the
 // final view, since every loaded image is accounted for in `data.sequence`.
 async function loadSequenceFromFolder(handle, data) {
-  if ((await handle.queryPermission({ mode: 'readwrite' })) !== 'granted') {
-    if ((await handle.requestPermission({ mode: 'readwrite' })) !== 'granted') {
-      showResultMessage('Read/write permission for that folder was not granted.');
+  if ((await handle.queryPermission({ mode: 'read' })) !== 'granted') {
+    if ((await handle.requestPermission({ mode: 'read' })) !== 'granted') {
+      showResultMessage('Read permission for that folder was not granted.');
       return;
     }
   }
