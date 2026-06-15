@@ -15,7 +15,7 @@ let candidateGroup = null;
 let currentComparison = null;
 
 // UI Elements
-let controlsPanel, folderInput, restartBtn, renamePrompt;
+let renamePrompt;
 
 // File System Access API (Chromium browsers): lets us rename files in place
 const fsAccessSupported = 'showDirectoryPicker' in window;
@@ -43,25 +43,9 @@ function setup() {
   textSize(20);
   background(220);
 
-  // Controls float over the canvas in a fixed overlay panel (see #controls
-  // in style.css) so they don't add to the page height / cause scrolling.
-  controlsPanel = createDiv('');
-  controlsPanel.id('controls');
-
-  restartBtn = createButton('Start Over (Esc)');
-  restartBtn.mousePressed(startOver);
-  restartBtn.parent(controlsPanel);
-
-  // Folder picker: select a whole folder of images at once
-  folderInput = createFileInput(handleFileSelect, true);
-  folderInput.elt.setAttribute('webkitdirectory', '');
-  folderInput.elt.setAttribute('directory', '');
-  folderInput.parent(controlsPanel);
-
-  // Drag-and-drop anywhere on the page (including over the floating
-  // #controls panel, which sits on top of the canvas) - also handles
-  // dropped folders. Without preventDefault on dragover/drop, the browser
-  // would instead navigate to the dropped file.
+  // Drag-and-drop anywhere on the page loads images, including dropped
+  // folders. Without preventDefault on dragover/drop, the browser would
+  // instead navigate to the dropped file.
   window.addEventListener('dragover', e => e.preventDefault());
   window.addEventListener('drop', onNativeDrop);
 
@@ -629,7 +613,6 @@ function startOver() {
   candidateGroup = null;
   currentComparison = null;
   panFractions = new Map();
-  if (folderInput && folderInput.elt) folderInput.elt.value = '';
   dirHandle = null;
   if (renamePrompt) { renamePrompt.remove(); renamePrompt = null; }
   background(220);

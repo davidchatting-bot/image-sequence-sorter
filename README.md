@@ -11,8 +11,7 @@ Source: https://editor.p5js.org/davidchatting/sketches/6IkZVx0a3
 Open `index.html` in a browser (or serve the directory with a local
 static server). Add images by:
 
-- dropping image files (or a whole folder) onto the canvas, or
-- using the "Choose Folder" input to load every image in a folder, or
+- dropping image files (or a whole folder) onto the page, or
 - if installed as a desktop app (see below), selecting image files in your
   OS file manager and choosing "Open with > Image Sequence Sorter"
 
