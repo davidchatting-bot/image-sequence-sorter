@@ -73,10 +73,16 @@ saved - use a Chromium-based browser for that.
 ### Installing as a desktop app
 
 In Chromium browsers you can install this as a desktop app (menu > "Install
-Image Sequence Sorter..."). Once installed, image files are registered as a
-file type this app handles, so selecting one or more images in your OS file
-manager and choosing "Open with > Image Sequence Sorter" launches the app
-with those files already loaded, ready to sort.
+Image Sequence Sorter..."). Once installed, image files and `sequence.json`
+files are registered as file types this app handles, so:
+
+- selecting one or more images in your OS file manager and choosing "Open
+  with > Image Sequence Sorter" launches the app with those files already
+  loaded, ready to sort.
+- right-clicking a `sequence.json` and choosing "Open with > Image Sequence
+  Sorter" launches the app and, after you pick the folder it's in (a file
+  handle alone doesn't reveal its containing folder), loads the images it
+  lists straight into the final sorted view.
 
 ## Build number
 

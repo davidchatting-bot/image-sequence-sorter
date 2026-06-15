@@ -74,15 +74,20 @@ function setup() {
 
   if (fsAccessSupported) loadRememberedDirHandle();
 
-  // When installed as a PWA and launched via "Open with" on image file(s)
-  // (registered as a file handler in manifest.json), load those files in.
-  // The launch queue retains unconsumed launches until a consumer is set,
-  // so registering here in setup() (after p5's globals exist) is safe.
+  // When installed as a PWA and launched via "Open with" on image file(s) or
+  // a sequence.json (registered as file handlers in manifest.json), load
+  // those in. The launch queue retains unconsumed launches until a consumer
+  // is set, so registering here in setup() (after p5's globals exist) is
+  // safe.
   if ('launchQueue' in window) {
     window.launchQueue.setConsumer(async (launchParams) => {
       for (const fileHandle of launchParams.files || []) {
         const file = await fileHandle.getFile();
-        if (file.type.startsWith('image/')) addImage({ file, name: file.name, type: file.type });
+        if (file.type.startsWith('image/')) {
+          addImage({ file, name: file.name, type: file.type });
+        } else if (file.name.toLowerCase().endsWith('.json')) {
+          await openSequenceFile(file);
+        }
       }
     });
   }
@@ -336,6 +341,113 @@ function showResultMessage(msg) {
     popup.remove();
     popup = null;
   });
+}
+
+// Handles a sequence.json opened via "Open with" (file_handlers in
+// manifest.json). The file itself doesn't give access to the folder it's
+// in, so this clears the current session and prompts the user to pick that
+// folder so the images it lists can be loaded.
+async function openSequenceFile(file) {
+  let data = null;
+  try {
+    data = JSON.parse(await file.text());
+  } catch (err) {
+    console.error('Failed to parse', file.name, err);
+  }
+
+  if (!data || !Array.isArray(data.sequence)) {
+    showResultMessage(`"${file.name}" doesn't look like a sequence.json file.`);
+    return;
+  }
+
+  startOver();
+  showLoadPrompt(data);
+}
+
+// Chrome only allows showDirectoryPicker() to be called from a click (a
+// keypress here doesn't count), so opening a sequence.json shows a pop-up
+// whose button click is what's allowed to open the real folder picker.
+function showLoadPrompt(data) {
+  if (popup) return;
+
+  const count = (data.sequence || []).reduce((n, g) => n + g.length, 0);
+
+  popup = createDiv('');
+  popup.id('popup');
+
+  const closePrompt = () => { popup.remove(); popup = null; };
+
+  const pickAndLoad = async () => {
+    let handle;
+    try {
+      handle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'image-sequence-sorter' });
+    } catch (err) {
+      return; // user cancelled the picker
+    }
+    closePrompt();
+    loadSequenceFromFolder(handle, data);
+  };
+
+  if (rememberedDirHandle) {
+    popup.html(`<p>Opened sequence.json (${count} image(s)). Load images from "${rememberedDirHandle.name}"?</p>`);
+
+    const btn = createButton(`Load from "${rememberedDirHandle.name}"`);
+    btn.parent(popup);
+    btn.mousePressed(() => { closePrompt(); loadSequenceFromFolder(rememberedDirHandle, data); });
+
+    const otherBtn = createButton('Choose a different folder');
+    otherBtn.parent(popup);
+    otherBtn.mousePressed(pickAndLoad);
+  } else {
+    popup.html(`<p>Opened sequence.json (${count} image(s)). Choose the folder containing these images.</p>`);
+
+    const btn = createButton('Choose folder');
+    btn.parent(popup);
+    btn.mousePressed(pickAndLoad);
+  }
+}
+
+// Loads the images named in a sequence.json's `sequence` from `handle`,
+// then arranges them via applyPendingSequence() - going straight to the
+// final view, since every loaded image is accounted for in `data.sequence`.
+async function loadSequenceFromFolder(handle, data) {
+  if ((await handle.queryPermission({ mode: 'readwrite' })) !== 'granted') {
+    if ((await handle.requestPermission({ mode: 'readwrite' })) !== 'granted') {
+      showResultMessage('Read/write permission for that folder was not granted.');
+      return;
+    }
+  }
+
+  rememberDirHandle(handle);
+
+  const names = new Set();
+  for (const group of data.sequence || []) {
+    for (const entry of group) names.add(entry.name);
+  }
+
+  let missing = 0;
+  pendingSequenceData = data;
+  for (const name of names) {
+    try {
+      const fileHandle = await handle.getFileHandle(name);
+      const file = await fileHandle.getFile();
+      addImage({ file, name: file.name, type: file.type });
+    } catch (err) {
+      if (err.name !== 'NotFoundError') console.error(`Error loading ${name}:`, err);
+      missing++;
+    }
+  }
+
+  if (imgObjects.length === 0) {
+    pendingSequenceData = null;
+    showResultMessage('None of the images in sequence.json were found in that folder.');
+    return;
+  }
+
+  applyPendingSequence(pendingSequenceData);
+  pendingSequenceData = null;
+
+  if (missing) showResultMessage(`${missing} image(s) from sequence.json were not found in that folder.`);
 }
 
 function startSorting() {

@@ -29,7 +29,8 @@
         "image/jpeg": [".jpg", ".jpeg"],
         "image/gif": [".gif"],
         "image/webp": [".webp"],
-        "image/bmp": [".bmp"]
+        "image/bmp": [".bmp"],
+        "application/json": [".json"]
       }
     }
   ]
