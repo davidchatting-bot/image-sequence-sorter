@@ -6,7 +6,7 @@ canvas {
   display: block;
 }
 
-#renamePrompt {
+#popup {
   position: fixed;
   top: 50%;
   left: 50%;
@@ -20,9 +20,9 @@ canvas {
   font-family: sans-serif;
   z-index: 1000;
 }
-#renamePrompt p {
+#popup p {
   margin: 0 0 12px;
 }
-#renamePrompt button + button {
+#popup button + button {
   margin-left: 8px;
 }

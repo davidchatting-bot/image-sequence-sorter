@@ -17,15 +17,30 @@ let lo = 0, hi = -1, mid = -1;
 let candidateGroup = null;
 let currentComparison = null;
 
-// UI Elements
-let renamePrompt;
+// Set once sorting finishes, gating whether a save prompt is needed: stays
+// false if a dropped folder's sequence.json already accounted for every
+// loaded image (nothing changed), true otherwise (fresh sort, or new images
+// were merged into a previously-saved sequence).
+let sequenceDirty = true;
 
-// File System Access API (Chromium browsers): lets us rename files in place
+// State for a dropped folder's sequence.json check (see traverseEntry):
+// pendingSequenceData holds the parsed file once read (or stays null if none
+// was found). addImage() defers grouping new images into `groups` while a
+// folder is still being read, if it has a sequence.json, so the stored order
+// can be applied to the full set of loaded images at once.
+let pendingSequenceData = null;
+let directoryReadComplete = false;
+let pendingFileOps = 0;
+
+// UI Elements
+let popup;
+
+// File System Access API (Chromium browsers): lets us read/write sequence.json
 const fsAccessSupported = 'showDirectoryPicker' in window;
 let dirHandle = null;
 
-// Last folder used for renaming, persisted via IndexedDB so future sessions
-// don't need to re-pick it from scratch.
+// Last folder used for sequence.json, persisted via IndexedDB so future
+// sessions don't need to re-pick it from scratch.
 let rememberedDirHandle = null;
 
 // Pan state. Stored per-image as a fraction (-1..1) of that image's pan
@@ -123,73 +138,95 @@ function traverseEntry(entry) {
       if (f.type && f.type.startsWith('image/')) handleFileSelect({ file: f, name: f.name, type: f.type });
     });
   } else if (entry.isDirectory) {
+    directoryReadComplete = false;
+    pendingFileOps = 0;
+    pendingSequenceData = null;
+
     const reader = entry.createReader();
     const readNextBatch = () => {
       reader.readEntries(entries => {
-        if (!entries.length) return;
+        if (!entries.length) {
+          directoryReadComplete = true;
+          maybeApplyPendingSequence();
+          return;
+        }
         for (const e of entries) {
           if (e.isFile) {
+            pendingFileOps++;
             e.file(f => {
               if (f.type && f.type.startsWith('image/')) handleFileSelect({ file: f, name: f.name, type: f.type });
+              pendingFileOps--;
+              maybeApplyPendingSequence();
             });
           }
         }
         readNextBatch(); // readEntries() may not return everything in one call
       });
     };
-    readNextBatch();
+
+    // Check for a previously-saved sequence.json before reading image files,
+    // so addImage() knows up-front whether to hold off on grouping until all
+    // files in this folder have been loaded.
+    if (typeof entry.getFile === 'function') {
+      entry.getFile('sequence.json', {}, fileEntry => {
+        fileEntry.file(blob => {
+          blob.text().then(text => {
+            try { pendingSequenceData = JSON.parse(text); } catch { /* malformed - ignore */ }
+            readNextBatch();
+          }).catch(() => readNextBatch());
+        }, () => readNextBatch());
+      }, () => readNextBatch());
+    } else {
+      readNextBatch();
+    }
   }
 }
 
-// Strips a leftover temp prefix from a previously-interrupted apply (if
-// any, in either the old or current format), then any existing two-digit
-// order prefix, and caps the length.
-function baseNameFor(name) {
-  let base = name
-    .replace(/^__tmp_\d+_\d+__/, '')
-    .replace(/^__tmp\d+__/, '')
-    .replace(/^\d{2}-/, '');
-  if (base.length > 100) {
-    const extIndex = base.lastIndexOf('.');
-    const ext = extIndex >= 0 ? base.slice(extIndex) : '';
-    base = base.slice(0, 100 - ext.length) + ext;
-  }
-  return base;
+// Called whenever a file from a dropped folder finishes loading, and once
+// the folder listing itself is exhausted. Once both conditions hold, any
+// sequence.json found for that folder is applied to the now-complete set of
+// loaded images.
+function maybeApplyPendingSequence() {
+  if (!directoryReadComplete || pendingFileOps > 0) return;
+  if (pendingSequenceData) applyPendingSequence(pendingSequenceData);
+  pendingSequenceData = null;
 }
 
-// Works out which sorted files need renaming to match the sorted order
-// (i.e. their current name doesn't already have the right "NN-" prefix).
-// Final names are de-duplicated up front in case two files would otherwise
-// reduce to the same name.
-function computeRenames() {
-  let renames = [];
-  let usedNames = new Set();
+// Arranges already-loaded images into the order recorded in a folder's
+// sequence.json, going straight to the final view if every image is
+// accounted for. Any images not mentioned in the stored sequence (added
+// since it was saved) are appended as new groups and run through the normal
+// sort to find their place.
+function applyPendingSequence(data) {
+  const byName = new Map(imgObjects.map(obj => [obj.name, obj]));
+  const usedNames = new Set();
+  const matchedGroups = [];
 
-  sortedGroups.forEach((group, gIdx) => {
-    group.forEach(obj => {
-      const base = baseNameFor(obj.name);
-      let newName = `${String(gIdx + 1).padStart(2, '0')}-${base}`;
-
-      if (newName !== obj.name) {
-        let candidate = newName, n = 2;
-        while (usedNames.has(candidate)) {
-          const extIndex = newName.lastIndexOf('.');
-          const ext = extIndex >= 0 ? newName.slice(extIndex) : '';
-          const stem = extIndex >= 0 ? newName.slice(0, extIndex) : newName;
-          candidate = `${stem}-${n}${ext}`;
-          n++;
-        }
-        newName = candidate;
-        // Short, index-based temp name (comparable in length to the "NN-"
-        // prefix being added) built from the already length-capped base,
-        // so it can't exceed filesystem name limits.
-        renames.push({ obj, newName, tempName: `__tmp${renames.length}__${base}` });
+  for (const groupEntries of (data.sequence || [])) {
+    const group = [];
+    for (const entry of groupEntries) {
+      const obj = byName.get(entry.name);
+      if (obj) {
+        group.push(obj);
+        usedNames.add(entry.name);
+        if (!imageExif[entry.name]) imageExif[entry.name] = entry.exif || {};
       }
-      usedNames.add(newName);
-    });
-  });
+    }
+    if (group.length) matchedGroups.push(group);
+  }
 
-  return renames;
+  const newGroups = imgObjects.filter(obj => !usedNames.has(obj.name)).map(obj => [obj]);
+
+  sortedGroups = matchedGroups;
+  groups = [...matchedGroups, ...newGroups];
+  currentGroupIndex = matchedGroups.length;
+  sequenceDirty = newGroups.length > 0;
+
+  if (currentGroupIndex >= groups.length) {
+    finishSorting();
+  } else {
+    beginBinarySearchForCurrentGroup();
+  }
 }
 
 // Minimal IndexedDB wrapper for remembering the last folder picked via
@@ -242,10 +279,11 @@ function rememberDirHandle(handle) {
   idbSet('dirHandle', handle).catch(err => console.error('Failed to save remembered folder:', err));
 }
 
-// Renames each file in `renames` in place to match the sorted order, in the
-// given folder (or, if none given, prompts for one). Done in two passes via
-// temporary names so swapped/cyclic renames can't overwrite each other.
-async function applyRenames(renames, handle) {
+// Writes sequence.json (the sorted order, grouped by "equal" merges, each
+// image annotated with its EXIF metadata) to `handle` (or, if none given,
+// prompts for a folder). Overwrites any existing sequence.json in that
+// folder.
+async function saveSequence(handle) {
   if (handle) {
     dirHandle = handle;
   } else {
@@ -258,126 +296,46 @@ async function applyRenames(renames, handle) {
 
   if ((await dirHandle.queryPermission({ mode: 'readwrite' })) !== 'granted') {
     if ((await dirHandle.requestPermission({ mode: 'readwrite' })) !== 'granted') {
-      showRenameResult('Read/write permission for that folder was not granted - nothing renamed.');
+      showResultMessage('Read/write permission for that folder was not granted - sequence.json not saved.');
       return;
     }
   }
 
   rememberDirHandle(dirHandle);
 
-  // Snapshot each image's EXIF data against its current (pre-rename) name,
-  // so it can be written out under the final name once renaming is done.
-  const exifByObj = new Map(imgObjects.map(obj => [obj, imageExif[obj.name] || {}]));
+  const sequence = sortedGroups.map(group => group.map(obj => ({
+    name: obj.name,
+    exif: imageExif[obj.name] || {},
+  })));
 
-  // Only rename files that actually exist (by name) in the chosen folder -
-  // it may not be the one the dropped images came from.
-  let toRename = [];
-  let notFound = 0;
-  for (const r of renames) {
-    try {
-      await dirHandle.getFileHandle(r.obj.name);
-      toRename.push(r);
-    } catch (err) {
-      if (err.name !== 'NotFoundError') console.error(`Error checking for ${r.obj.name}:`, err);
-      notFound++;
-    }
-  }
-
-  let renamed = 0;
-  let failed = [];
-
-  for (const r of toRename) {
-    try {
-      await renameWithRetry(r.obj.name, r.tempName);
-      r.obj.name = r.tempName;
-    } catch (err) {
-      if (err.name === 'AbortError') break; // user cancelled the re-pick prompt
-      console.error(`Failed to rename ${r.obj.name} to a temporary name:`, err);
-      failed.push(r.obj.name);
-    }
-  }
-  for (const r of toRename) {
-    if (r.obj.name !== r.tempName) continue; // temp rename above failed
-    try {
-      await renameWithRetry(r.obj.name, r.newName);
-      r.obj.name = r.newName;
-      renamed++;
-    } catch (err) {
-      if (err.name === 'AbortError') break;
-      console.error(`Failed to rename ${r.obj.name} to ${r.newName}:`, err);
-      failed.push(r.obj.name);
-    }
-  }
-
-  // Write filename -> EXIF metadata for every loaded image, keyed by its
-  // final (possibly renamed) name, alongside the renamed files.
   try {
-    const exifOutput = {};
-    for (const [obj, exif] of exifByObj) {
-      exifOutput[obj.name] = exif;
-    }
-    const fileHandle = await dirHandle.getFileHandle('exif.json', { create: true });
+    const fileHandle = await dirHandle.getFileHandle('sequence.json', { create: true });
     const writable = await fileHandle.createWritable();
-    await writable.write(JSON.stringify(exifOutput, null, 2));
+    await writable.write(JSON.stringify({ sequence }, null, 2));
     await writable.close();
+    sequenceDirty = false;
+    showResultMessage(`Saved sequence.json (${imgObjects.length} image(s)) to "${dirHandle.name}".`);
   } catch (err) {
-    console.error('Failed to write exif.json:', err);
+    console.error('Failed to write sequence.json:', err);
+    showResultMessage('Failed to save sequence.json - see console.');
   }
-
-  let msg = `Renamed ${renamed} of ${renames.length} file(s) in the selected folder.`;
-  if (notFound) msg += ` ${notFound} not found in that folder - is it the right one?`;
-  if (failed.length) msg += ` ${failed.length} failed - see console.`;
-  console.log(msg);
-  showRenameResult(msg);
 }
 
-// Shows a dismissible pop-up with the outcome of applyRenames().
-function showRenameResult(msg) {
-  if (renamePrompt) { renamePrompt.remove(); renamePrompt = null; }
+// Shows a dismissible pop-up with a message (e.g. the outcome of
+// saveSequence()).
+function showResultMessage(msg) {
+  if (popup) { popup.remove(); popup = null; }
 
-  renamePrompt = createDiv('');
-  renamePrompt.id('renamePrompt');
-  renamePrompt.html(`<p>${msg}</p>`);
+  popup = createDiv('');
+  popup.id('popup');
+  popup.html(`<p>${msg}</p>`);
 
   const btn = createButton('OK');
-  btn.parent(renamePrompt);
+  btn.parent(popup);
   btn.mousePressed(() => {
-    renamePrompt.remove();
-    renamePrompt = null;
+    popup.remove();
+    popup = null;
   });
-}
-
-// Renames oldName -> newName via dirHandle. Chromium can throw
-// InvalidStateError ("state cached ... had changed since it was read from
-// disk") once a directory handle has been used for prior renames - if so,
-// re-prompt for the same folder to get a fresh handle and retry once.
-async function renameWithRetry(oldName, newName) {
-  try {
-    await renameHandle(dirHandle, oldName, newName);
-  } catch (err) {
-    if (err.name !== 'InvalidStateError') throw err;
-    rememberDirHandle(await window.showDirectoryPicker({ mode: 'readwrite', id: 'image-sequence-sorter' }));
-    await renameHandle(dirHandle, oldName, newName);
-  }
-}
-
-// Renames a file in `dir` from `oldName` to `newName`, fetching a fresh
-// handle by name so each step doesn't depend on a handle returned by a
-// previous move().
-async function renameHandle(dir, oldName, newName) {
-  const fileHandle = await dir.getFileHandle(oldName);
-  if (typeof fileHandle.move === 'function') {
-    await fileHandle.move(newName);
-    return;
-  }
-  // Fallback: copy contents to a new file handle, then remove the old one.
-  const file = await fileHandle.getFile();
-  const data = await file.arrayBuffer();
-  const newHandle = await dir.getFileHandle(newName, { create: true });
-  const writable = await newHandle.createWritable();
-  await writable.write(data);
-  await writable.close();
-  await dir.removeEntry(oldName);
 }
 
 function startSorting() {
@@ -418,40 +376,37 @@ function nextComparison() {
 function finishSorting() {
   sortingDone = true;
   currentComparison = null;
-  if (fsAccessSupported) showRenamePrompt();
+  if (fsAccessSupported && sequenceDirty) showSavePrompt();
 }
 
 // Chrome only allows showDirectoryPicker() to be called from a click (a
 // keypress here doesn't count), so we can't pop it open directly once
 // sorting finishes via a key. Instead, show a small pop-up with a single
 // button - clicking it is the click that opens the real folder picker.
-function showRenamePrompt() {
-  if (renamePrompt) return;
+function showSavePrompt() {
+  if (popup) return;
 
-  const renames = computeRenames();
-  if (renames.length === 0) return; // nothing to rename, no need to prompt
+  popup = createDiv('');
+  popup.id('popup');
 
-  renamePrompt = createDiv('');
-  renamePrompt.id('renamePrompt');
-
-  const closePrompt = () => { renamePrompt.remove(); renamePrompt = null; };
+  const closePrompt = () => { popup.remove(); popup = null; };
 
   if (rememberedDirHandle) {
-    renamePrompt.html(`<p>Sorting complete. Rename ${renames.length} file(s) in "${rememberedDirHandle.name}" to match this order?</p>`);
+    popup.html(`<p>Sorting complete. Save sequence.json (${imgObjects.length} image(s)) to "${rememberedDirHandle.name}"?</p>`);
 
-    const btn = createButton(`Rename in "${rememberedDirHandle.name}"`);
-    btn.parent(renamePrompt);
-    btn.mousePressed(() => { applyRenames(renames, rememberedDirHandle); closePrompt(); });
+    const btn = createButton(`Save to "${rememberedDirHandle.name}"`);
+    btn.parent(popup);
+    btn.mousePressed(() => { saveSequence(rememberedDirHandle); closePrompt(); });
 
     const otherBtn = createButton('Choose a different folder');
-    otherBtn.parent(renamePrompt);
-    otherBtn.mousePressed(() => { applyRenames(renames, null); closePrompt(); });
+    otherBtn.parent(popup);
+    otherBtn.mousePressed(() => { saveSequence(null); closePrompt(); });
   } else {
-    renamePrompt.html(`<p>Sorting complete. Rename ${renames.length} file(s) to match this order?</p>`);
+    popup.html(`<p>Sorting complete. Save sequence.json (${imgObjects.length} image(s)) to a folder?</p>`);
 
-    const btn = createButton('Rename files in folder');
-    btn.parent(renamePrompt);
-    btn.mousePressed(() => { applyRenames(renames, null); closePrompt(); });
+    const btn = createButton('Save sequence.json');
+    btn.parent(popup);
+    btn.mousePressed(() => { saveSequence(null); closePrompt(); });
   }
 }
 
@@ -637,7 +592,11 @@ function startOver() {
   currentComparison = null;
   panFractions = new Map();
   dirHandle = null;
-  if (renamePrompt) { renamePrompt.remove(); renamePrompt = null; }
+  sequenceDirty = true;
+  pendingSequenceData = null;
+  directoryReadComplete = false;
+  pendingFileOps = 0;
+  if (popup) { popup.remove(); popup = null; }
   background(220);
   text("Drop images to start", width / 2, height / 2);
 }
@@ -659,8 +618,13 @@ function addImage(file) {
       .catch(err => console.error('EXIF parse error for', f.name, err));
   }
 
-  groups.push([obj]);
+  // While a dropped folder's sequence.json is still being checked/applied,
+  // hold off on grouping/sorting - applyPendingSequence() sets up `groups`
+  // for the whole folder at once.
+  if (!pendingSequenceData) {
+    groups.push([obj]);
+    if (groups.length > 1) startSorting();
+  }
 
-  if (groups.length > 1) startSorting();
   console.log("Added image:", f.name);
 }

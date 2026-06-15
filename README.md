@@ -1,8 +1,8 @@
 # Image Sequence Sorter
 
 A p5.js sketch for sorting dropped-in images into a single ordered sequence
-via pairwise comparisons (binary insertion sort), then renaming the
-corresponding files on disk to match that order.
+via pairwise comparisons (binary insertion sort), then saving that order to
+a `sequence.json` file alongside the images.
 
 Source: https://editor.p5js.org/davidchatting/sketches/6IkZVx0a3
 
@@ -26,34 +26,49 @@ Then sort with:
   sequence - drop it and move on, without merging or inserting it
 - **Esc** — start over
 
-### Direct rename (Chromium browsers)
+### Saving the sequence (Chromium browsers)
 
 In browsers that support the File System Access API (Chrome, Edge, etc.), as
-soon as sorting is complete and there's anything to rename, a small pop-up
-appears with a "Rename files in folder" button (browsers only allow the
-folder picker itself to be opened from a click, not a keypress, so this one
-click is needed). Clicking it prompts you to pick the folder the images came
-from and grant read/write access, then renames each file in place to match
-the sorted order. Files in the picked folder that aren't part of the current
-sequence are left untouched, and any sorted files not found there are
-reported. If nothing needs renaming, no pop-up appears.
+soon as sorting is complete a small pop-up appears with a "Save
+sequence.json" button (browsers only allow the folder picker itself to be
+opened from a click, not a keypress, so this one click is needed). Clicking
+it prompts you to pick the folder the images came from and grant read/write
+access, then writes (or overwrites) a `sequence.json` file there.
 
-Alongside the renamed files, an `exif.json` is written (or overwritten) in
-the same folder, mapping each image's final filename to its EXIF/IPTC/XMP
+`sequence.json` contains the sorted order - grouped, so images merged with
+**S** stay together - with each image annotated with its EXIF/IPTC/XMP
 metadata (caption, photographer, credit, date, camera settings, etc.), as
-read from the file when it was first loaded.
+read from the file when it was first loaded:
 
-In other browsers, sorting still works but there's currently no way to apply
-the result - use a Chromium-based browser to rename the files.
+```json
+{
+  "sequence": [
+    [{ "name": "img2.jpg", "exif": { "...": "..." } }],
+    [
+      { "name": "img1.jpg", "exif": { "...": "..." } },
+      { "name": "img3.jpg", "exif": { "...": "..." } }
+    ],
+    [{ "name": "img4.jpg", "exif": { "...": "..." } }]
+  ]
+}
+```
 
 The chosen folder is remembered (via IndexedDB) for next time. On future
-visits the pop-up offers to rename directly in that remembered folder
+visits the pop-up offers to save directly to that remembered folder
 (re-prompting for permission if needed, but not for the folder itself), with
 a "Choose a different folder" option alongside it.
 
-If the browser reports that the folder's cached state is stale (this can
-happen after files have already been renamed once), you'll be prompted to
-pick the folder again - choose the same folder to continue.
+### Loading a saved sequence
+
+If a dropped folder already contains a `sequence.json`, its images are loaded
+directly into that stored order and the final sorted view appears
+immediately - no comparisons needed. Any images in the folder that aren't
+mentioned in `sequence.json` (added since it was last saved) are sorted in
+as usual via comparisons against the restored order, and the save pop-up
+then offers to write an updated `sequence.json` including them.
+
+In other browsers, sorting still works but `sequence.json` can't be read or
+saved - use a Chromium-based browser for that.
 
 ### Installing as a desktop app
 
