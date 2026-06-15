@@ -15,7 +15,7 @@ let candidateGroup = null;
 let currentComparison = null;
 
 // UI Elements
-let fileInput, folderInput, restartBtn, mvBox, renamePrompt;
+let controlsPanel, fileInput, folderInput, restartBtn, mvBox, renamePrompt;
 
 // File System Access API (Chromium browsers): lets us rename files in place
 const fsAccessSupported = 'showDirectoryPicker' in window;
@@ -43,14 +43,23 @@ function setup() {
   textSize(20);
   background(220);
 
+  // Controls float over the canvas in a fixed overlay panel (see #controls
+  // in style.css) so they don't add to the page height / cause scrolling.
+  controlsPanel = createDiv('');
+  controlsPanel.id('controls');
+
+  restartBtn = createButton('Start Over (Esc)');
+  restartBtn.mousePressed(startOver);
+  restartBtn.parent(controlsPanel);
+
   fileInput = createFileInput(handleFileSelect, true);
-  fileInput.position(10, height + 20);
+  fileInput.parent(controlsPanel);
 
   // Folder picker: select a whole folder of images at once
   folderInput = createFileInput(handleFileSelect, true);
   folderInput.elt.setAttribute('webkitdirectory', '');
   folderInput.elt.setAttribute('directory', '');
-  folderInput.position(10, height + 55);
+  folderInput.parent(controlsPanel);
 
   // Native drop fallback (also handles dropped folders)
   const elt = document.querySelector('canvas');
@@ -59,14 +68,11 @@ function setup() {
     elt.addEventListener('drop', onNativeDrop);
   }
 
-  restartBtn = createButton('Start Over (Esc)');
-  restartBtn.mousePressed(startOver);
-  restartBtn.position(10, 10);
-
+  // mv-commands textarea: also a fixed overlay (see #mvCommandBox in
+  // style.css), hidden until sorting is done and there's something to show.
   mvBox = createElement('textarea', '');
   mvBox.id('mvCommandBox');
-  mvBox.size(windowWidth - 20, 100);
-  mvBox.position(10, height + 90);
+  mvBox.hide();
 
   fetch('version.json', { cache: 'no-store' })
     .then(r => r.ok ? r.json() : null)
@@ -91,10 +97,6 @@ function setup() {
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
-  if (restartBtn) restartBtn.position(10, 10);
-  if (fileInput) fileInput.position(10, height + 20);
-  if (folderInput) folderInput.position(10, height + 55);
-  if (mvBox) mvBox.size(windowWidth - 20, 100).position(10, height + 90);
 }
 
 function handleFileSelect(file) {
@@ -468,7 +470,7 @@ function generateUnixCommand() {
   }).join(' ; ');
 
   console.log("Unix rename command:", cmds);
-  if (mvBox) mvBox.value(cmds);
+  if (mvBox) mvBox.value(cmds).show();
 }
 
 function keyPressed() {
@@ -653,7 +655,7 @@ function startOver() {
   panFractions = new Map();
   if (fileInput && fileInput.elt) fileInput.elt.value = '';
   if (folderInput && folderInput.elt) folderInput.elt.value = '';
-  if (mvBox) mvBox.value('');
+  if (mvBox) mvBox.value('').hide();
   dirHandle = null;
   if (renamePrompt) { renamePrompt.remove(); renamePrompt = null; }
   background(220);
