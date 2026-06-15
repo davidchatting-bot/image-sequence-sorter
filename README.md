@@ -27,6 +27,7 @@ Then sort with:
 - **Shift+D** — the right-hand (candidate) image doesn't belong in the
   sequence - drop it and move on, without merging or inserting it
 - **Esc** — start over
+- **f** — toggle fullscreen
 
 ### Saving the sequence (Chromium browsers)
 
@@ -86,8 +87,14 @@ saved - use a Chromium-based browser for that.
 ### Installing as a desktop app
 
 In Chromium browsers you can install this as a desktop app (menu > "Install
-Image Sequence Sorter..."). Once installed, image files and `sequence.json`
-files are registered as file types this app handles, so:
+Image Sequence Sorter..."). The installed app opens fullscreen with no title
+bar (`"display": "fullscreen"` in `manifest.json`, falling back to
+`"standalone"` - title bar shown - on platforms that don't support that). The
+**f** key toggles fullscreen manually, e.g. on a fallback platform or in a
+regular browser tab.
+
+Once installed, image files and `sequence.json` files are registered as file
+types this app handles, so:
 
 - selecting one or more images in your OS file manager and choosing "Open
   with > Image Sequence Sorter" launches the app with those files already

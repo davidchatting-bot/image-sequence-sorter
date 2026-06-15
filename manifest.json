@@ -4,7 +4,8 @@
   "description": "Sort dropped-in images into an ordered sequence and generate mv commands to rename the files accordingly.",
   "start_url": ".",
   "scope": ".",
-  "display": "standalone",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
   "background_color": "#dcdcdc",
   "theme_color": "#2c5f8a",
   "icons": [

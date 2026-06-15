@@ -546,6 +546,10 @@ function keyPressed() {
     startOver();
     return;
   }
+  if (key === 'f' || key === 'F') {
+    toggleFullscreen();
+    return;
+  }
   if (!currentComparison) return;
 
   if (key === 'a') {
@@ -561,6 +565,16 @@ function keyPressed() {
     discardLeft();
   } else if (key === 'D') {
     discardRight();
+  }
+}
+
+// Toggles the page in and out of the Fullscreen API, which - unlike the
+// PWA's "standalone" display mode alone - hides the window's title bar too.
+function toggleFullscreen() {
+  if (document.fullscreenElement) {
+    document.exitFullscreen();
+  } else {
+    document.documentElement.requestFullscreen();
   }
 }
 
