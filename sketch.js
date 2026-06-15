@@ -560,7 +560,6 @@ function displayImageFull(imgObj, xStart, wSection, hCanvas, offsetX = 0) {
     let cropWidth = (wSection / drawWidth) * img.width;
     let pxPerScreen = img.width / drawWidth;
     let cropX = (img.width - cropWidth) / 2 + offsetX * pxPerScreen;
-    cropX = constrain(cropX, 0, img.width - cropWidth);
     image(img, xStart, 0, wSection, hCanvas, cropX, 0, cropWidth, img.height);
   } else {
     let xOffset = (wSection - drawWidth) / 2 + offsetX;
@@ -590,9 +589,30 @@ function mousePressed() {
 function mouseDragged() {
   if (isDragging && activeImg) {
     let deltaX = mouseX - dragStartX;
-    panOffsets.set(activeImg, (panOffsets.get(activeImg) || 0) + deltaX);
+    let maxOffset = maxPanOffset(activeImg);
+    let newOffset = constrain((panOffsets.get(activeImg) || 0) + deltaX, -maxOffset, maxOffset);
+    panOffsets.set(activeImg, newOffset);
     dragStartX = mouseX;
   }
+}
+
+// Width of one image's section of the canvas in the current view (two
+// side-by-side during a comparison, one per sorted group in the final view).
+function getSectionWidth() {
+  if (currentComparison) return width / 2;
+  if (sortingDone && sortedGroups.length > 0) return width / sortedGroups.length;
+  return width;
+}
+
+// How far (in screen pixels) imgObj can be panned left/right before its edge
+// reaches the edge of its section - zero if the image already fits fully
+// within its section (nothing to reveal by panning).
+function maxPanOffset(imgObj) {
+  let img = imgObj.img;
+  if (!img || !img.width || !img.height) return 0;
+  let drawWidth = height * (img.width / img.height);
+  let wSection = getSectionWidth();
+  return Math.max(0, (drawWidth - wSection) / 2);
 }
 
 function mouseReleased() {
