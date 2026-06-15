@@ -25,6 +25,10 @@ jobs:
         run: |
           echo "{\"deployment\": ${{ github.run_number }}}" > version.json
 
+      - name: Stamp service worker cache name
+        run: |
+          sed -i "s/image-sequence-sorter-BUILD/image-sequence-sorter-${{ github.run_number }}/" sw.js
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

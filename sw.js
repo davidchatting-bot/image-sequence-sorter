@@ -1,4 +1,8 @@
-const CACHE_NAME = 'image-sequence-sorter-v5';
+// BUILD is stamped with the deploy's run number by the GitHub Actions
+// workflow, so CACHE_NAME changes on every deploy - this guarantees the
+// browser detects the service worker update (and so picks up any app-shell
+// changes) regardless of whether sw.js itself was edited.
+const CACHE_NAME = 'image-sequence-sorter-BUILD';
 
 const APP_SHELL = [
   '.',
