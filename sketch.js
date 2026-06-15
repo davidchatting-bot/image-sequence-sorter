@@ -563,8 +563,12 @@ function displayImageFull(imgObj, xStart, wSection, hCanvas, panFraction = 0) {
   let drawWidth = drawHeight * aspect;
 
   // maxOffset is this view's pan range for this image; scaling the -1..1
-  // fraction by it keeps offsetX within range without needing a clamp.
-  let maxOffset = Math.max(0, (drawWidth - wSection) / 2);
+  // fraction by it keeps offsetX within range without needing a clamp. For
+  // a cropped image (drawWidth > wSection) this is how far the crop window
+  // can slide; for a letterboxed image (drawWidth < wSection) it's how far
+  // the image can slide within its empty margin - either way the image
+  // stays within its section.
+  let maxOffset = Math.abs(drawWidth - wSection) / 2;
   let offsetX = panFraction * maxOffset;
 
   if (drawWidth > wSection) {
@@ -621,15 +625,15 @@ function getSectionWidth() {
   return width;
 }
 
-// How far (in screen pixels) imgObj can be panned left/right before its edge
-// reaches the edge of its section - zero if the image already fits fully
-// within its section (nothing to reveal by panning).
+// How far (in screen pixels) imgObj can be panned left/right: for a cropped
+// image, how far the crop window can slide; for a letterboxed image, how
+// far it can slide within its empty margin before reaching the section edge.
 function maxPanOffset(imgObj) {
   let img = imgObj.img;
   if (!img || !img.width || !img.height) return 0;
   let drawWidth = height * (img.width / img.height);
   let wSection = getSectionWidth();
-  return Math.max(0, (drawWidth - wSection) / 2);
+  return Math.abs(drawWidth - wSection) / 2;
 }
 
 function mouseReleased() {
