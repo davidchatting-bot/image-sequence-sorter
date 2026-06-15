@@ -12,6 +12,8 @@ Open `index.html` in a browser (or serve the directory with a local
 static server). Add images by:
 
 - dropping image files (or a whole folder) onto the page, or
+- dropping a `sequence.json` file on its own (see "Loading a saved sequence"
+  below), or
 - if installed as a desktop app (see below), selecting image files in your
   OS file manager and choosing "Open with > Image Sequence Sorter"
 
@@ -66,6 +68,11 @@ immediately - no comparisons needed. Any images in the folder that aren't
 mentioned in `sequence.json` (added since it was last saved) are sorted in
 as usual via comparisons against the restored order, and the save pop-up
 then offers to write an updated `sequence.json` including them.
+
+You can also drop a `sequence.json` file on its own (not inside a folder)
+onto the page. This clears the current session and shows a pop-up asking you
+to pick (or re-use the remembered) folder containing the images it lists,
+then loads straight into the final sorted view as above.
 
 In other browsers, sorting still works but `sequence.json` can't be read or
 saved - use a Chromium-based browser for that.

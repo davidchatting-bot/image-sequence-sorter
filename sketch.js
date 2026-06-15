@@ -109,6 +109,19 @@ function handleFileSelect(file) {
   }
 }
 
+// Routes a file dropped directly onto the page (not from inside a dropped
+// folder, which is handled separately by traverseEntry's directory branch):
+// images go to handleFileSelect() as usual, while a dropped sequence.json is
+// opened via openSequenceFile() - the same path used for "Open with" launches.
+function handleDroppedFile(f) {
+  if (!f) return;
+  if (f.type && f.type.startsWith('image/')) {
+    handleFileSelect({ file: f, name: f.name, type: f.type });
+  } else if (f.name && f.name.toLowerCase().endsWith('.json')) {
+    openSequenceFile(f);
+  }
+}
+
 function onNativeDrop(e) {
   e.preventDefault();
   const dt = e.dataTransfer;
@@ -121,8 +134,7 @@ function onNativeDrop(e) {
       if (entry) {
         traverseEntry(entry);
       } else if (item.kind === 'file') {
-        const f = item.getAsFile();
-        if (f && f.type.startsWith('image/')) handleFileSelect({ file: f, name: f.name, type: f.type });
+        handleDroppedFile(item.getAsFile());
       }
     }
     return;
@@ -130,7 +142,7 @@ function onNativeDrop(e) {
 
   if (dt.files && dt.files.length) {
     for (const f of Array.from(dt.files)) {
-      if (f.type && f.type.startsWith('image/')) handleFileSelect({ file: f, name: f.name, type: f.type });
+      handleDroppedFile(f);
     }
   }
 }
@@ -139,9 +151,7 @@ function onNativeDrop(e) {
 // (sub-folders inside a dropped folder are not traversed).
 function traverseEntry(entry) {
   if (entry.isFile) {
-    entry.file(f => {
-      if (f.type && f.type.startsWith('image/')) handleFileSelect({ file: f, name: f.name, type: f.type });
-    });
+    entry.file(handleDroppedFile);
   } else if (entry.isDirectory) {
     directoryReadComplete = false;
     pendingFileOps = 0;
