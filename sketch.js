@@ -4,6 +4,9 @@
 let deploymentNumber = null;
 
 let imgObjects = [];
+
+// EXIF/IPTC/XMP metadata for each loaded image, keyed by filename.
+let imageExif = {};
 let groups = []; // each group is an array of image objects
 let sortedGroups = [];
 let sortingDone = false;
@@ -262,6 +265,10 @@ async function applyRenames(renames, handle) {
 
   rememberDirHandle(dirHandle);
 
+  // Snapshot each image's EXIF data against its current (pre-rename) name,
+  // so it can be written out under the final name once renaming is done.
+  const exifByObj = new Map(imgObjects.map(obj => [obj, imageExif[obj.name] || {}]));
+
   // Only rename files that actually exist (by name) in the chosen folder -
   // it may not be the one the dropped images came from.
   let toRename = [];
@@ -300,6 +307,21 @@ async function applyRenames(renames, handle) {
       console.error(`Failed to rename ${r.obj.name} to ${r.newName}:`, err);
       failed.push(r.obj.name);
     }
+  }
+
+  // Write filename -> EXIF metadata for every loaded image, keyed by its
+  // final (possibly renamed) name, alongside the renamed files.
+  try {
+    const exifOutput = {};
+    for (const [obj, exif] of exifByObj) {
+      exifOutput[obj.name] = exif;
+    }
+    const fileHandle = await dirHandle.getFileHandle('exif.json', { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(JSON.stringify(exifOutput, null, 2));
+    await writable.close();
+  } catch (err) {
+    console.error('Failed to write exif.json:', err);
   }
 
   let msg = `Renamed ${renamed} of ${renames.length} file(s) in the selected folder.`;
@@ -605,6 +627,7 @@ function mouseReleased() {
 
 function startOver() {
   imgObjects = [];
+  imageExif = {};
   groups = [];
   sortedGroups = [];
   sortingDone = false;
@@ -629,6 +652,12 @@ function addImage(file) {
   let img = loadImage(blobURL, () => URL.revokeObjectURL(blobURL));
   let obj = { img, name: f.name };
   imgObjects.push(obj);
+
+  if (typeof exifr !== 'undefined' && exifr.parse) {
+    exifr.parse(f, { tiff: true, exif: true, iptc: true, xmp: true, icc: false, jfif: false, ihdr: false })
+      .then(exif => { imageExif[f.name] = JSON.parse(JSON.stringify(exif || {})); })
+      .catch(err => console.error('EXIF parse error for', f.name, err));
+  }
 
   groups.push([obj]);
 

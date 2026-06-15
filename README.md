@@ -38,6 +38,11 @@ the sorted order. Files in the picked folder that aren't part of the current
 sequence are left untouched, and any sorted files not found there are
 reported. If nothing needs renaming, no pop-up appears.
 
+Alongside the renamed files, an `exif.json` is written (or overwritten) in
+the same folder, mapping each image's final filename to its EXIF/IPTC/XMP
+metadata (caption, photographer, credit, date, camera settings, etc.), as
+read from the file when it was first loaded.
+
 In other browsers, sorting still works but there's currently no way to apply
 the result - use a Chromium-based browser to rename the files.
 
