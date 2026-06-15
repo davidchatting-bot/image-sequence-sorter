@@ -567,7 +567,10 @@ function displayImageFull(imgObj, xStart, wSection, hCanvas, offsetX = 0) {
   if (drawWidth > wSection) {
     let cropWidth = (wSection / drawWidth) * img.width;
     let pxPerScreen = img.width / drawWidth;
-    let cropX = (img.width - cropWidth) / 2 + offsetX * pxPerScreen;
+    // Subtract so the image content follows the drag direction (dragging
+    // right moves the image right, revealing more of its left side) -
+    // matching the letterboxed case below, where offsetX is added directly.
+    let cropX = (img.width - cropWidth) / 2 - offsetX * pxPerScreen;
     image(img, xStart, 0, wSection, hCanvas, cropX, 0, cropWidth, img.height);
   } else {
     let xOffset = (wSection - drawWidth) / 2 + offsetX;
