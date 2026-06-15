@@ -23,3 +23,6 @@ canvas {
 #renamePrompt p {
   margin: 0 0 12px;
 }
+#renamePrompt button + button {
+  margin-left: 8px;
+}

@@ -21,6 +21,10 @@ let fileInput, folderInput, restartBtn, mvBox, renamePrompt;
 const fsAccessSupported = 'showDirectoryPicker' in window;
 let dirHandle = null;
 
+// Last folder used for renaming, persisted via IndexedDB so future sessions
+// don't need to re-pick it from scratch.
+let rememberedDirHandle = null;
+
 // Pan state
 let panOffsets = new Map();
 let isDragging = false;
@@ -62,6 +66,8 @@ function setup() {
     .then(r => r.ok ? r.json() : null)
     .then(data => { if (data && data.deployment) deploymentNumber = data.deployment; })
     .catch(() => {});
+
+  if (fsAccessSupported) loadRememberedDirHandle();
 }
 
 function windowResized() {
@@ -187,14 +193,68 @@ function computeRenames() {
   return renames;
 }
 
-// Prompts for the folder containing the dropped images, then renames each
-// file in `renames` in place to match the sorted order. Done in two passes
-// via temporary names so swapped/cyclic renames can't overwrite each other.
-async function applyRenames(renames) {
+// Minimal IndexedDB wrapper for remembering the last folder picked via
+// showDirectoryPicker() - FileSystemDirectoryHandle objects are structured-
+// clonable and can be stored directly.
+const IDB_NAME = 'image-sequence-sorter';
+const IDB_STORE = 'handles';
+
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbGet(key) {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbSet(key, value) {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put(value, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function loadRememberedDirHandle() {
   try {
-    dirHandle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'image-sequence-sorter' });
+    rememberedDirHandle = (await idbGet('dirHandle')) || null;
   } catch (err) {
-    return; // user cancelled the picker
+    console.error('Failed to load remembered folder:', err);
+  }
+}
+
+// Sets dirHandle and persists it as the remembered folder for next time.
+function rememberDirHandle(handle) {
+  dirHandle = handle;
+  rememberedDirHandle = handle;
+  idbSet('dirHandle', handle).catch(err => console.error('Failed to save remembered folder:', err));
+}
+
+// Renames each file in `renames` in place to match the sorted order, in the
+// given folder (or, if none given, prompts for one). Done in two passes via
+// temporary names so swapped/cyclic renames can't overwrite each other.
+async function applyRenames(renames, handle) {
+  if (handle) {
+    dirHandle = handle;
+  } else {
+    try {
+      dirHandle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'image-sequence-sorter' });
+    } catch (err) {
+      return; // user cancelled the picker
+    }
   }
 
   if ((await dirHandle.queryPermission({ mode: 'readwrite' })) !== 'granted') {
@@ -203,6 +263,8 @@ async function applyRenames(renames) {
       return;
     }
   }
+
+  rememberDirHandle(dirHandle);
 
   // Only rename files that actually exist (by name) in the chosen folder -
   // it may not be the one the dropped images came from.
@@ -278,7 +340,7 @@ async function renameWithRetry(oldName, newName) {
     await renameHandle(dirHandle, oldName, newName);
   } catch (err) {
     if (err.name !== 'InvalidStateError') throw err;
-    dirHandle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'image-sequence-sorter' });
+    rememberDirHandle(await window.showDirectoryPicker({ mode: 'readwrite', id: 'image-sequence-sorter' }));
     await renameHandle(dirHandle, oldName, newName);
   }
 }
@@ -356,15 +418,26 @@ function showRenamePrompt() {
 
   renamePrompt = createDiv('');
   renamePrompt.id('renamePrompt');
-  renamePrompt.html(`<p>Sorting complete. Rename ${renames.length} file(s) to match this order?</p>`);
 
-  const btn = createButton('Rename files in folder');
-  btn.parent(renamePrompt);
-  btn.mousePressed(() => {
-    applyRenames(renames);
-    renamePrompt.remove();
-    renamePrompt = null;
-  });
+  const closePrompt = () => { renamePrompt.remove(); renamePrompt = null; };
+
+  if (rememberedDirHandle) {
+    renamePrompt.html(`<p>Sorting complete. Rename ${renames.length} file(s) in "${rememberedDirHandle.name}" to match this order?</p>`);
+
+    const btn = createButton(`Rename in "${rememberedDirHandle.name}"`);
+    btn.parent(renamePrompt);
+    btn.mousePressed(() => { applyRenames(renames, rememberedDirHandle); closePrompt(); });
+
+    const otherBtn = createButton('Choose a different folder');
+    otherBtn.parent(renamePrompt);
+    otherBtn.mousePressed(() => { applyRenames(renames, null); closePrompt(); });
+  } else {
+    renamePrompt.html(`<p>Sorting complete. Rename ${renames.length} file(s) to match this order?</p>`);
+
+    const btn = createButton('Rename files in folder');
+    btn.parent(renamePrompt);
+    btn.mousePressed(() => { applyRenames(renames, null); closePrompt(); });
+  }
 }
 
 function generateUnixCommand() {

@@ -42,6 +42,11 @@ folder that aren't part of the current sequence are left untouched, and any
 sorted files not found there are reported. If nothing needs renaming, no
 pop-up appears.
 
+The chosen folder is remembered (via IndexedDB) for next time. On future
+visits the pop-up offers to rename directly in that remembered folder
+(re-prompting for permission if needed, but not for the folder itself), with
+a "Choose a different folder" option alongside it.
+
 If the browser reports that the folder's cached state is stale (this can
 happen after files have already been renamed once), you'll be prompted to
 pick the folder again - choose the same folder to continue.
