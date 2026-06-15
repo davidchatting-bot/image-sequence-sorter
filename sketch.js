@@ -25,8 +25,14 @@ let dirHandle = null;
 // don't need to re-pick it from scratch.
 let rememberedDirHandle = null;
 
-// Pan state
-let panOffsets = new Map();
+// Pan state. Stored per-image as a fraction (-1..1) of that image's pan
+// range in the CURRENT view, not as a pixel offset - the pan range
+// (maxPanOffset) depends on the section width, which differs between the
+// comparison view and the final view (and between final views with
+// different numbers of groups). A fraction stays meaningful across those
+// transitions, whereas a pixel offset could fall outside the new range and
+// get permanently clamped/lost, leaving the image stuck.
+let panFractions = new Map();
 let isDragging = false;
 let dragStartX = 0;
 let activeImg = null;
@@ -545,24 +551,21 @@ function displayGroupsInSections(groupArray) {
   let sectionWidth = width / groupArray.length;
   for (let i = 0; i < groupArray.length; i++) {
     let group = groupArray[i];
-    if (group.length > 0) displayImageFull(group[0], i * sectionWidth, sectionWidth, height, panOffsets.get(group[0]) || 0);
+    if (group.length > 0) displayImageFull(group[0], i * sectionWidth, sectionWidth, height, panFractions.get(group[0]) || 0);
   }
 }
 
-function displayImageFull(imgObj, xStart, wSection, hCanvas, offsetX = 0) {
+function displayImageFull(imgObj, xStart, wSection, hCanvas, panFraction = 0) {
   let img = imgObj.img;
   if (!img || !img.width || !img.height) return;
   let aspect = img.width / img.height;
   let drawHeight = hCanvas;
   let drawWidth = drawHeight * aspect;
 
-  // Re-clamp to this section's bounds even if offsetX came from a different
-  // context (e.g. the window was resized, or the image moved from the
-  // comparison view to the final view, since these can have a different
-  // section width) - otherwise an out-of-range source rect below can throw
-  // and freeze the whole sketch.
+  // maxOffset is this view's pan range for this image; scaling the -1..1
+  // fraction by it keeps offsetX within range without needing a clamp.
   let maxOffset = Math.max(0, (drawWidth - wSection) / 2);
-  offsetX = constrain(offsetX, -maxOffset, maxOffset);
+  let offsetX = panFraction * maxOffset;
 
   if (drawWidth > wSection) {
     let cropWidth = (wSection / drawWidth) * img.width;
@@ -581,7 +584,7 @@ function displayImageFull(imgObj, xStart, wSection, hCanvas, offsetX = 0) {
 function displaySortedGroups() {
   let sectionWidth = width / sortedGroups.length;
   for (let g = 0; g < sortedGroups.length; g++) {
-    if (sortedGroups[g].length > 0) displayImageFull(sortedGroups[g][0], g * sectionWidth, sectionWidth, height, panOffsets.get(sortedGroups[g][0]) || 0);
+    if (sortedGroups[g].length > 0) displayImageFull(sortedGroups[g][0], g * sectionWidth, sectionWidth, height, panFractions.get(sortedGroups[g][0]) || 0);
   }
 }
 
@@ -601,8 +604,11 @@ function mouseDragged() {
   if (isDragging && activeImg) {
     let deltaX = mouseX - dragStartX;
     let maxOffset = maxPanOffset(activeImg);
-    let newOffset = constrain((panOffsets.get(activeImg) || 0) + deltaX, -maxOffset, maxOffset);
-    panOffsets.set(activeImg, newOffset);
+    if (maxOffset > 0) {
+      let current = panFractions.get(activeImg) || 0;
+      let newFraction = constrain(current + deltaX / maxOffset, -1, 1);
+      panFractions.set(activeImg, newFraction);
+    }
     dragStartX = mouseX;
   }
 }
@@ -640,7 +646,7 @@ function startOver() {
   lo = 0; hi = -1; mid = -1;
   candidateGroup = null;
   currentComparison = null;
-  panOffsets = new Map();
+  panFractions = new Map();
   if (fileInput && fileInput.elt) fileInput.elt.value = '';
   if (folderInput && folderInput.elt) folderInput.elt.value = '';
   if (mvBox) mvBox.value('');
