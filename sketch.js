@@ -556,6 +556,14 @@ function displayImageFull(imgObj, xStart, wSection, hCanvas, offsetX = 0) {
   let drawHeight = hCanvas;
   let drawWidth = drawHeight * aspect;
 
+  // Re-clamp to this section's bounds even if offsetX came from a different
+  // context (e.g. the window was resized, or the image moved from the
+  // comparison view to the final view, since these can have a different
+  // section width) - otherwise an out-of-range source rect below can throw
+  // and freeze the whole sketch.
+  let maxOffset = Math.max(0, (drawWidth - wSection) / 2);
+  offsetX = constrain(offsetX, -maxOffset, maxOffset);
+
   if (drawWidth > wSection) {
     let cropWidth = (wSection / drawWidth) * img.width;
     let pxPerScreen = img.width / drawWidth;
