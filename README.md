@@ -13,7 +13,9 @@ static server). Add images by:
 
 - dropping image files (or a whole folder) onto the canvas, or
 - using the "Choose Files" input to pick individual images, or
-- using the "Choose Folder" input to load every image in a folder
+- using the "Choose Folder" input to load every image in a folder, or
+- if installed as a desktop app (see below), selecting image files in your
+  OS file manager and choosing "Open with > Image Sequence Sorter"
 
 Then sort with:
 
@@ -50,6 +52,14 @@ a "Choose a different folder" option alongside it.
 If the browser reports that the folder's cached state is stale (this can
 happen after files have already been renamed once), you'll be prompted to
 pick the folder again - choose the same folder to continue.
+
+### Installing as a desktop app
+
+In Chromium browsers you can install this as a desktop app (menu > "Install
+Image Sequence Sorter..."). Once installed, image files are registered as a
+file type this app handles, so selecting one or more images in your OS file
+manager and choosing "Open with > Image Sequence Sorter" launches the app
+with those files already loaded, ready to sort.
 
 ## Build number
 

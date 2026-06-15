@@ -68,6 +68,19 @@ function setup() {
     .catch(() => {});
 
   if (fsAccessSupported) loadRememberedDirHandle();
+
+  // When installed as a PWA and launched via "Open with" on image file(s)
+  // (registered as a file handler in manifest.json), load those files in.
+  // The launch queue retains unconsumed launches until a consumer is set,
+  // so registering here in setup() (after p5's globals exist) is safe.
+  if ('launchQueue' in window) {
+    window.launchQueue.setConsumer(async (launchParams) => {
+      for (const fileHandle of launchParams.files || []) {
+        const file = await fileHandle.getFile();
+        if (file.type.startsWith('image/')) addImage({ file, name: file.name, type: file.type });
+      }
+    });
+  }
 }
 
 function windowResized() {
