@@ -15,7 +15,7 @@ let candidateGroup = null;
 let currentComparison = null;
 
 // UI Elements
-let controlsPanel, fileInput, folderInput, restartBtn, mvBox, renamePrompt;
+let controlsPanel, folderInput, restartBtn, renamePrompt;
 
 // File System Access API (Chromium browsers): lets us rename files in place
 const fsAccessSupported = 'showDirectoryPicker' in window;
@@ -52,9 +52,6 @@ function setup() {
   restartBtn.mousePressed(startOver);
   restartBtn.parent(controlsPanel);
 
-  fileInput = createFileInput(handleFileSelect, true);
-  fileInput.parent(controlsPanel);
-
   // Folder picker: select a whole folder of images at once
   folderInput = createFileInput(handleFileSelect, true);
   folderInput.elt.setAttribute('webkitdirectory', '');
@@ -67,12 +64,6 @@ function setup() {
     elt.addEventListener('dragover', e => e.preventDefault());
     elt.addEventListener('drop', onNativeDrop);
   }
-
-  // mv-commands textarea: also a fixed overlay (see #mvCommandBox in
-  // style.css), hidden until sorting is done and there's something to show.
-  mvBox = createElement('textarea', '');
-  mvBox.id('mvCommandBox');
-  mvBox.hide();
 
   fetch('version.json', { cache: 'no-store' })
     .then(r => r.ok ? r.json() : null)
@@ -331,12 +322,10 @@ async function applyRenames(renames, handle) {
   if (notFound) msg += ` ${notFound} not found in that folder - is it the right one?`;
   if (failed.length) msg += ` ${failed.length} failed - see console.`;
   console.log(msg);
-  if (mvBox) mvBox.value(msg);
   showRenameResult(msg);
 }
 
-// Shows a dismissible pop-up with the outcome of applyRenames(), so it's
-// visible even though the mv-commands textarea is below the canvas.
+// Shows a dismissible pop-up with the outcome of applyRenames().
 function showRenameResult(msg) {
   if (renamePrompt) { renamePrompt.remove(); renamePrompt = null; }
 
@@ -423,7 +412,6 @@ function nextComparison() {
 function finishSorting() {
   sortingDone = true;
   currentComparison = null;
-  generateUnixCommand();
   if (fsAccessSupported) showRenamePrompt();
 }
 
@@ -459,18 +447,6 @@ function showRenamePrompt() {
     btn.parent(renamePrompt);
     btn.mousePressed(() => { applyRenames(renames, null); closePrompt(); });
   }
-}
-
-function generateUnixCommand() {
-  let cmds = sortedGroups.map((group, gIdx) => {
-    return group.map(obj => {
-      let newName = `${String(gIdx + 1).padStart(2, '0')}-${baseNameFor(obj.name)}`;
-      return `mv "${obj.name}" "${newName}"`;
-    }).join(' ; ');
-  }).join(' ; ');
-
-  console.log("Unix rename command:", cmds);
-  if (mvBox) mvBox.value(cmds).show();
 }
 
 function keyPressed() {
@@ -653,9 +629,7 @@ function startOver() {
   candidateGroup = null;
   currentComparison = null;
   panFractions = new Map();
-  if (fileInput && fileInput.elt) fileInput.elt.value = '';
   if (folderInput && folderInput.elt) folderInput.elt.value = '';
-  if (mvBox) mvBox.value('').hide();
   dirHandle = null;
   if (renamePrompt) { renamePrompt.remove(); renamePrompt = null; }
   background(220);
