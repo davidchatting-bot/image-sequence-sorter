@@ -571,12 +571,12 @@ function displayImageFull(imgObj, xStart, wSection, hCanvas, offsetX = 0) {
 function displaySortedGroups() {
   let sectionWidth = width / sortedGroups.length;
   for (let g = 0; g < sortedGroups.length; g++) {
-    if (sortedGroups[g].length > 0) displayImageFull(sortedGroups[g][0], g * sectionWidth, sectionWidth, height, 0);
+    if (sortedGroups[g].length > 0) displayImageFull(sortedGroups[g][0], g * sectionWidth, sectionWidth, height, panOffsets.get(sortedGroups[g][0]) || 0);
   }
 }
 
 function mousePressed() {
-  let groupArray = currentComparison ? [currentComparison[0], currentComparison[1]] : null;
+  let groupArray = currentComparison ? [currentComparison[0], currentComparison[1]] : (sortingDone ? sortedGroups : null);
   if (!groupArray) return;
   let sectionWidth = width / groupArray.length;
   let index = floor(mouseX / sectionWidth);
