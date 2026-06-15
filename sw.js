@@ -1,4 +1,4 @@
-const CACHE_NAME = 'image-sequence-sorter-v3';
+const CACHE_NAME = 'image-sequence-sorter-v4';
 
 const APP_SHELL = [
   '.',
