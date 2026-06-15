@@ -58,12 +58,12 @@ function setup() {
   folderInput.elt.setAttribute('directory', '');
   folderInput.parent(controlsPanel);
 
-  // Native drop fallback (also handles dropped folders)
-  const elt = document.querySelector('canvas');
-  if (elt) {
-    elt.addEventListener('dragover', e => e.preventDefault());
-    elt.addEventListener('drop', onNativeDrop);
-  }
+  // Drag-and-drop anywhere on the page (including over the floating
+  // #controls panel, which sits on top of the canvas) - also handles
+  // dropped folders. Without preventDefault on dragover/drop, the browser
+  // would instead navigate to the dropped file.
+  window.addEventListener('dragover', e => e.preventDefault());
+  window.addEventListener('drop', onNativeDrop);
 
   fetch('version.json', { cache: 'no-store' })
     .then(r => r.ok ? r.json() : null)
