@@ -371,6 +371,15 @@ async function openSequenceFile(file) {
   }
 
   startOver();
+
+  // queryPermission() (unlike requestPermission() or the folder picker)
+  // doesn't need a click, so if the remembered folder still has granted
+  // read/write access, load straight in with no prompt at all.
+  if (rememberedDirHandle && (await rememberedDirHandle.queryPermission({ mode: 'readwrite' })) === 'granted') {
+    await loadSequenceFromFolder(rememberedDirHandle, data);
+    return;
+  }
+
   showLoadPrompt(data);
 }
 

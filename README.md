@@ -72,7 +72,9 @@ then offers to write an updated `sequence.json` including them.
 You can also drop a `sequence.json` file on its own (not inside a folder)
 onto the page. This clears the current session and shows a pop-up asking you
 to pick (or re-use the remembered) folder containing the images it lists,
-then loads straight into the final sorted view as above.
+then loads straight into the final sorted view as above. If the remembered
+folder already has granted permission, this happens with no pop-up at all -
+the images load straight away.
 
 In other browsers, sorting still works but `sequence.json` can't be read or
 saved - use a Chromium-based browser for that.
