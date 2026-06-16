@@ -37,7 +37,7 @@ let pendingSequenceData = null;
 let directoryReadComplete = false;
 let pendingFileOps = 0;
 
-// Slideshow state (space to enter, space to advance, Esc to exit)
+// Slideshow state (space to play/pause, arrows to step, Esc to exit)
 let slideshowMode = false;
 let slideshowImages = [];  // flat ordered list of imgObj, built from sortedGroups on entry
 let slideshowIndex = 0;
@@ -45,6 +45,8 @@ let slideshowAlpha = 0;              // 0=fully visible, 128=50% black overlay
 let slideshowState = 'idle';         // 'idle' | 'showing' | 'fading-out' | 'reversing'
 let slideshowTransitionStart = null; // millis() timestamp, for frame-rate-independent timing
 let slideshowTargetIndex = 0;        // for 'reversing': the index to snap to when done
+let slideshowPlaying = false;        // true = auto-advances every second
+let slideshowShowStart = null;       // millis() when current image entered 'showing' while playing
 
 // UI Elements
 let popup;
@@ -85,7 +87,7 @@ function setup() {
   // (browsers often intercept them for scrolling first). Listen at the window
   // level instead and prevent the default scroll behaviour.
   window.addEventListener('keydown', e => {
-    if (e.key === 'ArrowRight') { e.preventDefault(); handleSlideshowSpace(); }
+    if (e.key === 'ArrowRight') { e.preventDefault(); handleSlideshowRight(); }
     else if (e.key === 'ArrowLeft') { e.preventDefault(); handleSlideshowLeft(); }
   });
 
@@ -580,7 +582,7 @@ function keyPressed() {
     return;
   }
   if (keyCode === 32) { handleSlideshowSpace(); return; }
-  if (key === 'ArrowRight') { handleSlideshowSpace(); return; }
+  if (key === 'ArrowRight') { handleSlideshowRight(); return; }
   if (key === 'ArrowLeft')  { handleSlideshowLeft();  return; }
   if (!currentComparison) return;
 
@@ -683,11 +685,26 @@ function handleSlideshowSpace() {
     slideshowAlpha = 0;
     slideshowState = 'showing';
     slideshowMode = true;
+    slideshowPlaying = true;
+    slideshowShowStart = millis();
     if (!document.fullscreenElement) document.documentElement.requestFullscreen();
-  } else if (slideshowState === 'showing') {
-    slideshowState = 'fading-out';
-    slideshowTransitionStart = null;
+  } else {
+    slideshowPlaying = !slideshowPlaying;
+    if (slideshowPlaying && slideshowState === 'showing') {
+      slideshowShowStart = millis(); // restart 1-second display timer on resume
+    } else if (!slideshowPlaying) {
+      slideshowShowStart = null;
+    }
   }
+}
+
+// Manual forward advance (right arrow): immediately starts the fade-out.
+function handleSlideshowRight() {
+  if (!slideshowMode || slideshowState !== 'showing') return;
+  slideshowPlaying = false;
+  slideshowShowStart = null;
+  slideshowState = 'fading-out';
+  slideshowTransitionStart = null;
 }
 
 function handleSlideshowLeft() {
@@ -706,6 +723,8 @@ function exitSlideshow() {
   slideshowAlpha = 0;
   slideshowTransitionStart = null;
   slideshowTargetIndex = 0;
+  slideshowPlaying = false;
+  slideshowShowStart = null;
   if (document.fullscreenElement) document.exitFullscreen();
 }
 
@@ -734,6 +753,16 @@ function drawSlideshow() {
       slideshowAlpha = 0;
       slideshowState = 'showing';
       slideshowTransitionStart = null;
+      if (slideshowPlaying) slideshowShowStart = millis(); // start 1-second display timer
+    }
+  }
+
+  // Auto-advance: when playing and the image has been shown for 1 second, fade out.
+  if (slideshowState === 'showing' && slideshowPlaying && slideshowShowStart !== null) {
+    if (millis() - slideshowShowStart >= 1000) {
+      slideshowState = 'fading-out';
+      slideshowTransitionStart = null;
+      slideshowShowStart = null;
     }
   }
 
