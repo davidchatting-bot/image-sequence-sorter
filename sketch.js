@@ -633,13 +633,7 @@ function handleSlideshowSpace() {
     slideshowMode = true;
     if (!document.fullscreenElement) document.documentElement.requestFullscreen();
   } else if (slideshowState === 'showing') {
-    const imgObj = slideshowImages[slideshowIndex];
-    if (imgObj && getSlideTransform(imgObj)) {
-      slideshowState = 'fading-out';
-    } else {
-      // No transition: cut straight to black, next image appears immediately
-      slideshowIndex = (slideshowIndex + 1) % slideshowImages.length;
-    }
+    slideshowState = 'fading-out';
   }
 }
 
@@ -665,28 +659,25 @@ function drawSlideshow() {
   background(0);
   const imgObj = slideshowImages[slideshowIndex];
   if (imgObj) {
-    if (slideshowState === 'fading-out') {
-      // Apply the stored exit transform (we only enter fading-out when
-      // getSlideTransform returned non-null, so tr is always valid here).
+    const tr = slideshowState === 'fading-out' ? getSlideTransform(imgObj) : null;
+    if (slideshowState === 'showing') {
+      displayImageFull(imgObj, 0, width, height, panFractions.get(imgObj) || 0);
+    } else if (tr) {
+      // Fading-out with a transform: draw image with exit animation + overlay
       const t = Math.sqrt(slideshowAlpha / 128);
-      const tr = getSlideTransform(imgObj);
       push();
       translate(width / 2 + tr.dx * width * t, height / 2 + tr.dy * height * t);
       scale(1 + tr.scale * t);
       translate(-width / 2, -height / 2);
       displayImageFull(imgObj, 0, width, height, panFractions.get(imgObj) || 0);
       pop();
-    } else {
-      displayImageFull(imgObj, 0, width, height, panFractions.get(imgObj) || 0);
+      push();
+      noStroke();
+      fill(0, slideshowAlpha);
+      rect(0, 0, width, height);
+      pop();
     }
-  }
-
-  if (slideshowAlpha > 0) {
-    push();
-    noStroke();
-    fill(0, slideshowAlpha);
-    rect(0, 0, width, height);
-    pop();
+    // Fading-out with no transform: background(0) already shows black for the delay
   }
 
   push();
