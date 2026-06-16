@@ -42,7 +42,7 @@ let slideshowMode = false;
 let slideshowImages = [];  // flat ordered list of imgObj, built from sortedGroups on entry
 let slideshowIndex = 0;
 let slideshowAlpha = 0;       // 0=fully visible, 255=black overlay
-let slideshowState = 'idle';  // 'idle' | 'showing' | 'fading-out'
+let slideshowState = 'idle';  // 'idle' | 'showing' | 'fading-out' | 'reversing'
 
 // UI Elements
 let popup;
@@ -569,8 +569,12 @@ function keyPressed() {
     toggleFullscreen();
     return;
   }
-  if (keyCode === 32) {
+  if (keyCode === 32 || keyCode === RIGHT_ARROW) {
     handleSlideshowSpace();
+    return;
+  }
+  if (keyCode === LEFT_ARROW) {
+    handleSlideshowLeft();
     return;
   }
   if (!currentComparison) return;
@@ -637,6 +641,13 @@ function handleSlideshowSpace() {
   }
 }
 
+function handleSlideshowLeft() {
+  if (!slideshowMode || slideshowState !== 'showing') return;
+  slideshowIndex = (slideshowIndex - 1 + slideshowImages.length) % slideshowImages.length;
+  slideshowAlpha = 128;
+  slideshowState = 'reversing';
+}
+
 function exitSlideshow() {
   slideshowMode = false;
   slideshowState = 'idle';
@@ -645,39 +656,48 @@ function exitSlideshow() {
 }
 
 function drawSlideshow() {
-  // ~2 alpha units/frame at 60fps ≈ 1s fade-out to 50% black; next image snaps in
+  // ~2 alpha units/frame at 60fps ≈ 1s transition; same duration in both directions
   if (slideshowState === 'fading-out') {
     slideshowAlpha = min(128, slideshowAlpha + 2);
     if (slideshowAlpha >= 128) {
-      slideshowIndex++;
-      if (slideshowIndex >= slideshowImages.length) slideshowIndex = 0;
+      slideshowIndex = (slideshowIndex + 1) % slideshowImages.length;
       slideshowAlpha = 0;
       slideshowState = 'showing';
     }
+  } else if (slideshowState === 'reversing') {
+    slideshowAlpha = max(0, slideshowAlpha - 2);
+    if (slideshowAlpha <= 0) slideshowState = 'showing';
   }
 
   background(0);
   const imgObj = slideshowImages[slideshowIndex];
   if (imgObj) {
-    const tr = slideshowState === 'fading-out' ? getSlideTransform(imgObj) : null;
     if (slideshowState === 'showing') {
       displayImageFull(imgObj, 0, width, height, panFractions.get(imgObj) || 0);
-    } else if (tr) {
-      // Fading-out with a transform: draw image with exit animation + overlay
+    } else {
+      const tr = getSlideTransform(imgObj);
       const t = Math.sqrt(slideshowAlpha / 128);
-      push();
-      translate(width / 2 + tr.dx * width * t, height / 2 + tr.dy * height * t);
-      scale(1 + tr.scale * t);
-      translate(-width / 2, -height / 2);
-      displayImageFull(imgObj, 0, width, height, panFractions.get(imgObj) || 0);
-      pop();
-      push();
-      noStroke();
-      fill(0, slideshowAlpha);
-      rect(0, 0, width, height);
-      pop();
+      if (tr) {
+        // Transform applied at the same t in both directions: for fading-out t
+        // rises 0→1 (rest→peak), for reversing t falls 1→0 (peak→rest).
+        push();
+        translate(width / 2 + tr.dx * width * t, height / 2 + tr.dy * height * t);
+        scale(1 + tr.scale * t);
+        translate(-width / 2, -height / 2);
+        displayImageFull(imgObj, 0, width, height, panFractions.get(imgObj) || 0);
+        pop();
+      } else if (slideshowState === 'reversing') {
+        displayImageFull(imgObj, 0, width, height, panFractions.get(imgObj) || 0);
+      }
+      // No transform + fading-out: background(0) already holds black for the delay
+      if (slideshowAlpha > 0) {
+        push();
+        noStroke();
+        fill(0, slideshowAlpha);
+        rect(0, 0, width, height);
+        pop();
+      }
     }
-    // Fading-out with no transform: background(0) already shows black for the delay
   }
 
   push();
