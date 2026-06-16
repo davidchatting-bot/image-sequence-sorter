@@ -42,7 +42,7 @@ let slideshowMode = false;
 let slideshowImages = [];  // flat ordered list of imgObj, built from sortedGroups on entry
 let slideshowIndex = 0;
 let slideshowAlpha = 0;       // 0=fully visible, 255=black overlay
-let slideshowState = 'idle';  // 'idle' | 'fading-in' | 'showing' | 'fading-out'
+let slideshowState = 'idle';  // 'idle' | 'showing' | 'fading-out'
 
 // UI Elements
 let popup;
@@ -612,8 +612,8 @@ function handleSlideshowSpace() {
     if (!sortingDone || sortedGroups.length === 0) return;
     slideshowImages = sortedGroups.flatMap(g => g);
     slideshowIndex = 0;
-    slideshowAlpha = 255;
-    slideshowState = 'fading-in';
+    slideshowAlpha = 0;
+    slideshowState = 'showing';
     slideshowMode = true;
     if (!document.fullscreenElement) document.documentElement.requestFullscreen();
   } else if (slideshowState === 'showing') {
@@ -629,17 +629,15 @@ function exitSlideshow() {
 }
 
 function drawSlideshow() {
-  // ~8 alpha units/frame at 60fps ≈ 0.5s fade
+  // ~8 alpha units/frame at 60fps ≈ 0.5s fade-out; next image snaps in instantly
   if (slideshowState === 'fading-out') {
     slideshowAlpha = min(255, slideshowAlpha + 8);
     if (slideshowAlpha >= 255) {
       slideshowIndex++;
       if (slideshowIndex >= slideshowImages.length) slideshowIndex = 0;
-      slideshowState = 'fading-in';
+      slideshowAlpha = 0;
+      slideshowState = 'showing';
     }
-  } else if (slideshowState === 'fading-in') {
-    slideshowAlpha = max(0, slideshowAlpha - 8);
-    if (slideshowAlpha <= 0) slideshowState = 'showing';
   }
 
   background(0);
