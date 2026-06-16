@@ -629,10 +629,10 @@ function exitSlideshow() {
 }
 
 function drawSlideshow() {
-  // ~8 alpha units/frame at 60fps ≈ 0.5s fade-out; next image snaps in instantly
+  // ~2 alpha units/frame at 60fps ≈ 1s fade-out to 50% black; next image snaps in
   if (slideshowState === 'fading-out') {
-    slideshowAlpha = min(255, slideshowAlpha + 8);
-    if (slideshowAlpha >= 255) {
+    slideshowAlpha = min(128, slideshowAlpha + 2);
+    if (slideshowAlpha >= 128) {
       slideshowIndex++;
       if (slideshowIndex >= slideshowImages.length) slideshowIndex = 0;
       slideshowAlpha = 0;
@@ -647,7 +647,7 @@ function drawSlideshow() {
       // Apply the stored (or default) exit transform, scaled by sqrt(t) so
       // the motion is clearly visible early in the fade rather than only at
       // the end when the black overlay already hides it.
-      const t = Math.sqrt(slideshowAlpha / 255);
+      const t = Math.sqrt(slideshowAlpha / 128);
       const tr = imageTransforms[imgObj.name] || defaultTransform(imgObj.name);
       push();
       translate(width / 2 + tr.dx * width * t, height / 2 + tr.dy * height * t);
