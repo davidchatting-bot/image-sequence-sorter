@@ -610,25 +610,68 @@ function toggleFullscreen() {
   }
 }
 
-// Returns a deterministic default exit transform for an image, derived from
-// its filename so the same image always gets the same transform, even before
-// a sequence.json has been saved. dx/dy are canvas fractions, scale is the
-// additional zoom fraction at full fade (e.g. 0.15 = 15% zoom).
+// Returns a deterministic default exit transform for an image as a 2×3
+// affine matrix [[a, b, tx], [c, d, ty]] in math row-major convention.
+// tx/ty are normalised to canvas fractions (multiply by width/height to get
+// pixels). The matrix encodes an isotropic scale of 1.15 centred on the
+// canvas, with a small drift whose direction is derived from the filename hash
+// so the same image always gets a consistent direction.
 function defaultTransform(name) {
   let h = 0;
   for (const c of name) h = Math.imul(31, h) + c.charCodeAt(0) | 0;
   const angle = (Math.abs(h) % 360) * Math.PI / 180;
-  return { dx: Math.cos(angle) * 0.08, dy: Math.sin(angle) * 0.04, scale: 0.15 };
+  const k = 1.15;
+  const dx = Math.cos(angle) * 0.08;
+  const dy = Math.sin(angle) * 0.04;
+  // tx/ty fold in the "scale from centre" offset so applyMatrix works from
+  // the top-left origin: tx = 0.5*(1-k) + drift, ty = 0.5*(1-k) + drift
+  return [[k, 0, 0.5 * (1 - k) + dx],
+          [0, k, 0.5 * (1 - k) + dy]];
 }
 
-// Returns the exit transform for imgObj, or null if no transition should play.
-// The last image in the show always gets null regardless of what's stored —
-// this ensures old sequence.json files (saved before this rule existed) are
-// also handled correctly.
+// Upgrades legacy {dx, dy, scale} objects (written before the matrix format)
+// to the current 2×3 matrix form. Returns null unchanged.
+function normalizeTransform(tr) {
+  if (!tr) return null;
+  if (Array.isArray(tr)) return tr;
+  const k = 1 + tr.scale;
+  return [[k, 0, 0.5 * (1 - k) + tr.dx],
+          [0, k, 0.5 * (1 - k) + tr.dy]];
+}
+
+// Returns the 2×2 linear-part inverse of a 2×3 affine matrix, with
+// translation also inverted. Normalised tx/ty stay normalised.
+function invertMatrix(m) {
+  const a = m[0][0], b = m[0][1], tx = m[0][2];
+  const c = m[1][0], d = m[1][1], ty = m[1][2];
+  const det = a * d - b * c;
+  return [
+    [ d / det, -b / det, (b * ty - d * tx) / det],
+    [-c / det,  a / det, (c * tx - a * ty) / det]
+  ];
+}
+
+// Applies a 2×3 matrix m (math row-major, normalised tx/ty) interpolated
+// linearly from the identity at t=0 to the full matrix at t=1.
+// Uses p5.js applyMatrix which follows the HTML Canvas column-major convention
+// applyMatrix(a, b, c, d, e, f) → [[a,c,e],[b,d,f]].
+function applySlideMatrix(m, t) {
+  const a = m[0][0], b = m[0][1], tx = m[0][2];
+  const c = m[1][0], d = m[1][1], ty = m[1][2];
+  applyMatrix(
+    1 + t * (a - 1), t * c,
+    t * b,           1 + t * (d - 1),
+    t * tx * width,  t * ty * height
+  );
+}
+
+// Returns the exit transform for imgObj as a 2×3 matrix, or null if no
+// transition should play. The last image in the show always returns null
+// regardless of what's stored — handles old JSON saved before this rule.
 function getSlideTransform(imgObj) {
   if (slideshowImages[slideshowImages.length - 1] === imgObj) return null;
   const stored = imageTransforms[imgObj.name];
-  if (stored !== undefined) return stored;
+  if (stored !== undefined) return normalizeTransform(stored);
   return defaultTransform(imgObj.name);
 }
 
@@ -711,11 +754,9 @@ function drawSlideshow() {
 
       if (tr) {
         const t = Math.sqrt(slideshowAlpha / 128);
-        const dir = slideshowState === 'reversing' ? -1 : 1;
+        const m = slideshowState === 'reversing' ? invertMatrix(tr) : tr;
         push();
-        translate(width / 2 + tr.dx * width * t * dir, height / 2 + tr.dy * height * t * dir);
-        scale(1 + tr.scale * t * dir);
-        translate(-width / 2, -height / 2);
+        applySlideMatrix(m, t);
         displayImageFull(imgObj, 0, width, height, panFractions.get(imgObj) || 0);
         pop();
         push();
