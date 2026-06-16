@@ -26,8 +26,11 @@ Then sort with:
   sequence - remove it and keep searching for the candidate among the rest
 - **Shift+D** — the right-hand (candidate) image doesn't belong in the
   sequence - drop it and move on, without merging or inserting it
-- **Esc** — start over
+- **Esc** — start over (or exit slideshow if in one)
 - **f** — toggle fullscreen
+- **Space** — once sorting is complete, enter slideshow: goes fullscreen and steps
+  through all images in sequence order with a fade between each; press Space to
+  advance, Esc to exit back to the sorted view
 
 ### Saving the sequence (Chromium browsers)
 

@@ -32,6 +32,13 @@ let pendingSequenceData = null;
 let directoryReadComplete = false;
 let pendingFileOps = 0;
 
+// Slideshow state (space to enter, space to advance, Esc to exit)
+let slideshowMode = false;
+let slideshowImages = [];  // flat ordered list of imgObj, built from sortedGroups on entry
+let slideshowIndex = 0;
+let slideshowAlpha = 0;      // 0=fully visible, 255=black overlay
+let slideshowState = 'idle'; // 'idle' | 'fading-in' | 'showing' | 'fading-out'
+
 // UI Elements
 let popup;
 
@@ -543,11 +550,15 @@ function showSavePrompt() {
 
 function keyPressed() {
   if (keyCode === ESCAPE) {
-    startOver();
+    if (slideshowMode) { exitSlideshow(); } else { startOver(); }
     return;
   }
   if (key === 'f' || key === 'F') {
     toggleFullscreen();
+    return;
+  }
+  if (keyCode === 32) {
+    handleSlideshowSpace();
     return;
   }
   if (!currentComparison) return;
@@ -576,6 +587,62 @@ function toggleFullscreen() {
   } else {
     document.documentElement.requestFullscreen();
   }
+}
+
+function handleSlideshowSpace() {
+  if (!slideshowMode) {
+    if (!sortingDone || sortedGroups.length === 0) return;
+    slideshowImages = sortedGroups.flatMap(g => g);
+    slideshowIndex = 0;
+    slideshowAlpha = 255;
+    slideshowState = 'fading-in';
+    slideshowMode = true;
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+  } else if (slideshowState === 'showing') {
+    slideshowState = 'fading-out';
+  }
+}
+
+function exitSlideshow() {
+  slideshowMode = false;
+  slideshowState = 'idle';
+  slideshowAlpha = 0;
+  if (document.fullscreenElement) document.exitFullscreen();
+}
+
+function drawSlideshow() {
+  // ~8 alpha units/frame at 60fps ≈ 0.5s fade
+  if (slideshowState === 'fading-out') {
+    slideshowAlpha = min(255, slideshowAlpha + 8);
+    if (slideshowAlpha >= 255) {
+      slideshowIndex++;
+      if (slideshowIndex >= slideshowImages.length) { exitSlideshow(); return; }
+      slideshowState = 'fading-in';
+    }
+  } else if (slideshowState === 'fading-in') {
+    slideshowAlpha = max(0, slideshowAlpha - 8);
+    if (slideshowAlpha <= 0) slideshowState = 'showing';
+  }
+
+  background(0);
+  const imgObj = slideshowImages[slideshowIndex];
+  if (imgObj) displayImageFull(imgObj, 0, width, height, panFractions.get(imgObj) || 0);
+
+  if (slideshowAlpha > 0) {
+    push();
+    noStroke();
+    fill(0, slideshowAlpha);
+    rect(0, 0, width, height);
+    pop();
+  }
+
+  push();
+  textAlign(LEFT, BOTTOM);
+  textSize(14);
+  fill(255, 180);
+  noStroke();
+  text(`${slideshowIndex + 1} / ${slideshowImages.length}`, 12, height - 12);
+  pop();
 }
 
 // Shift+A: the left image (already placed in sortedGroups) doesn't belong
@@ -609,7 +676,9 @@ function advanceGroupIndex() {
 
 function draw() {
   background(220);
-  if (sortingDone) {
+  if (slideshowMode) {
+    drawSlideshow();
+  } else if (sortingDone) {
     text("Sorting complete", width / 2, 30);
     displaySortedGroups();
   } else if (currentComparison) {
@@ -677,6 +746,12 @@ function displaySortedGroups() {
 }
 
 function mousePressed() {
+  if (slideshowMode) {
+    isDragging = true;
+    dragStartX = mouseX;
+    activeImg = slideshowImages[slideshowIndex] || null;
+    return;
+  }
   let groupArray = currentComparison ? [currentComparison[0], currentComparison[1]] : (sortingDone ? sortedGroups : null);
   if (!groupArray) return;
   let sectionWidth = width / groupArray.length;
@@ -704,6 +779,7 @@ function mouseDragged() {
 // Width of one image's section of the canvas in the current view (two
 // side-by-side during a comparison, one per sorted group in the final view).
 function getSectionWidth() {
+  if (slideshowMode) return width;
   if (currentComparison) return width / 2;
   if (sortingDone && sortedGroups.length > 0) return width / sortedGroups.length;
   return width;
@@ -741,6 +817,11 @@ function startOver() {
   pendingSequenceData = null;
   directoryReadComplete = false;
   pendingFileOps = 0;
+  slideshowMode = false;
+  slideshowState = 'idle';
+  slideshowAlpha = 0;
+  slideshowImages = [];
+  slideshowIndex = 0;
   if (popup) { popup.remove(); popup = null; }
   background(220);
   text("Drop images to start", width / 2, height / 2);
