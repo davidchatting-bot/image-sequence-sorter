@@ -237,7 +237,10 @@ function applyPendingSequence(data) {
         group.push(obj);
         usedNames.add(entry.name);
         if (!imageExif[entry.name]) imageExif[entry.name] = entry.exif || {};
-        if (!imageTransforms[entry.name] && entry.transform) imageTransforms[entry.name] = entry.transform;
+        // undefined = not yet saved; null = explicitly no transition (last image)
+        if (!imageTransforms.hasOwnProperty(entry.name)) {
+          imageTransforms[entry.name] = entry.transform || null;
+        }
       }
     }
     if (group.length) matchedGroups.push(group);
@@ -331,11 +334,13 @@ async function saveSequence(handle) {
 
   rememberDirHandle(dirHandle);
 
-  const sequence = sortedGroups.map(group => group.map(obj => ({
-    name: obj.name,
-    exif: imageExif[obj.name] || {},
-    transform: imageTransforms[obj.name] || defaultTransform(obj.name),
-  })));
+  const flat = sortedGroups.flatMap(g => g);
+  const lastImg = flat[flat.length - 1];
+  const sequence = sortedGroups.map(group => group.map(obj => {
+    const entry = { name: obj.name, exif: imageExif[obj.name] || {} };
+    if (obj !== lastImg) entry.transform = imageTransforms[obj.name] || defaultTransform(obj.name);
+    return entry;
+  }));
 
   try {
     const fileHandle = await dirHandle.getFileHandle('sequence.json', { create: true });
@@ -607,6 +612,17 @@ function defaultTransform(name) {
   return { dx: Math.cos(angle) * 0.08, dy: Math.sin(angle) * 0.04, scale: 0.15 };
 }
 
+// Returns the exit transform for imgObj, or null if no transition should play.
+// imageTransforms entries: undefined = not yet saved (use positional default),
+// null = explicitly no transition (e.g. last image loaded from sequence.json).
+function getSlideTransform(imgObj) {
+  const stored = imageTransforms[imgObj.name];
+  if (stored !== undefined) return stored; // null means no transition
+  // Unsaved: last slide in the current show gets no transition
+  if (slideshowImages[slideshowImages.length - 1] === imgObj) return null;
+  return defaultTransform(imgObj.name);
+}
+
 function handleSlideshowSpace() {
   if (!slideshowMode) {
     if (!sortingDone || sortedGroups.length === 0) return;
@@ -617,7 +633,13 @@ function handleSlideshowSpace() {
     slideshowMode = true;
     if (!document.fullscreenElement) document.documentElement.requestFullscreen();
   } else if (slideshowState === 'showing') {
-    slideshowState = 'fading-out';
+    const imgObj = slideshowImages[slideshowIndex];
+    if (imgObj && getSlideTransform(imgObj)) {
+      slideshowState = 'fading-out';
+    } else {
+      // No transition: cut straight to black, next image appears immediately
+      slideshowIndex = (slideshowIndex + 1) % slideshowImages.length;
+    }
   }
 }
 
@@ -644,11 +666,10 @@ function drawSlideshow() {
   const imgObj = slideshowImages[slideshowIndex];
   if (imgObj) {
     if (slideshowState === 'fading-out') {
-      // Apply the stored (or default) exit transform, scaled by sqrt(t) so
-      // the motion is clearly visible early in the fade rather than only at
-      // the end when the black overlay already hides it.
+      // Apply the stored exit transform (we only enter fading-out when
+      // getSlideTransform returned non-null, so tr is always valid here).
       const t = Math.sqrt(slideshowAlpha / 128);
-      const tr = imageTransforms[imgObj.name] || defaultTransform(imgObj.name);
+      const tr = getSlideTransform(imgObj);
       push();
       translate(width / 2 + tr.dx * width * t, height / 2 + tr.dy * height * t);
       scale(1 + tr.scale * t);
