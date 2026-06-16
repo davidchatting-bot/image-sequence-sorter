@@ -616,7 +616,7 @@ function drawSlideshow() {
     slideshowAlpha = min(255, slideshowAlpha + 8);
     if (slideshowAlpha >= 255) {
       slideshowIndex++;
-      if (slideshowIndex >= slideshowImages.length) { exitSlideshow(); return; }
+      if (slideshowIndex >= slideshowImages.length) slideshowIndex = 0;
       slideshowState = 'fading-in';
     }
   } else if (slideshowState === 'fading-in') {
