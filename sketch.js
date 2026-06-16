@@ -626,7 +626,26 @@ function drawSlideshow() {
 
   background(0);
   const imgObj = slideshowImages[slideshowIndex];
-  if (imgObj) displayImageFull(imgObj, 0, width, height, panFractions.get(imgObj) || 0);
+  if (imgObj) {
+    // During fade-out, drift + zoom in the direction given by a golden-angle
+    // spread over image indices, so consecutive images move differently —
+    // suggesting spatial relationship between shots.
+    const t = slideshowState === 'fading-out' ? slideshowAlpha / 255 : 0;
+    if (t > 0) {
+      const angle = (slideshowIndex * 137.508) * Math.PI / 180;
+      push();
+      translate(
+        width  / 2 + Math.cos(angle) * 0.04 * width  * t,
+        height / 2 + Math.sin(angle) * 0.02 * height * t
+      );
+      scale(1 + 0.06 * t);
+      translate(-width / 2, -height / 2);
+      displayImageFull(imgObj, 0, width, height, panFractions.get(imgObj) || 0);
+      pop();
+    } else {
+      displayImageFull(imgObj, 0, width, height, panFractions.get(imgObj) || 0);
+    }
+  }
 
   if (slideshowAlpha > 0) {
     push();
