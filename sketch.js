@@ -41,9 +41,10 @@ let pendingFileOps = 0;
 let slideshowMode = false;
 let slideshowImages = [];  // flat ordered list of imgObj, built from sortedGroups on entry
 let slideshowIndex = 0;
-let slideshowAlpha = 0;            // 0=fully visible, 128=50% black overlay
-let slideshowState = 'idle';       // 'idle' | 'showing' | 'fading-out' | 'reversing'
+let slideshowAlpha = 0;              // 0=fully visible, 128=50% black overlay
+let slideshowState = 'idle';         // 'idle' | 'showing' | 'fading-out' | 'reversing'
 let slideshowTransitionStart = null; // millis() timestamp, for frame-rate-independent timing
+let slideshowTargetIndex = 0;        // for 'reversing': the index to snap to when done
 
 // UI Elements
 let popup;
@@ -648,7 +649,10 @@ function handleSlideshowSpace() {
 
 function handleSlideshowLeft() {
   if (!slideshowMode || slideshowState !== 'showing') return;
-  slideshowIndex = (slideshowIndex - 1 + slideshowImages.length) % slideshowImages.length;
+  // Keep slideshowIndex on the CURRENT (outgoing) image; record where to snap
+  // once the animation is done. The outgoing image exits using the target's
+  // transform mirrored — the incoming image always appears instantly at rest.
+  slideshowTargetIndex = (slideshowIndex - 1 + slideshowImages.length) % slideshowImages.length;
   slideshowState = 'reversing';
   slideshowTransitionStart = null;
 }
@@ -658,18 +662,32 @@ function exitSlideshow() {
   slideshowState = 'idle';
   slideshowAlpha = 0;
   slideshowTransitionStart = null;
+  slideshowTargetIndex = 0;
   if (document.fullscreenElement) document.exitFullscreen();
 }
 
 function drawSlideshow() {
-  // Wall-clock 1s transitions so duration is frame-rate independent
-  const TRANSITION_MS = 1000;
+  // Animated transitions take 1s; no-transform (straight-to-black) take 0.5s.
+  // Both are wall-clock so duration is frame-rate independent.
   if (slideshowState === 'fading-out' || slideshowState === 'reversing') {
+    const outgoing = slideshowImages[slideshowIndex];
+    const targetIdx = slideshowState === 'reversing'
+      ? slideshowTargetIndex
+      : (slideshowIndex + 1) % slideshowImages.length;
+    const targetObj = slideshowImages[targetIdx];
+    const tr = slideshowState === 'fading-out'
+      ? getSlideTransform(outgoing)
+      : (targetObj ? getSlideTransform(targetObj) : null);
+    const TRANSITION_MS = tr ? 1000 : 500;
+
     if (slideshowTransitionStart === null) slideshowTransitionStart = millis();
     const progress = min(1, (millis() - slideshowTransitionStart) / TRANSITION_MS);
-    slideshowAlpha = floor(slideshowState === 'fading-out' ? 128 * progress : 128 * (1 - progress));
+    slideshowAlpha = floor(128 * progress);
+
     if (progress >= 1) {
-      if (slideshowState === 'fading-out') slideshowIndex = (slideshowIndex + 1) % slideshowImages.length;
+      slideshowIndex = slideshowState === 'reversing'
+        ? slideshowTargetIndex
+        : (slideshowIndex + 1) % slideshowImages.length;
       slideshowAlpha = 0;
       slideshowState = 'showing';
       slideshowTransitionStart = null;
@@ -682,28 +700,31 @@ function drawSlideshow() {
     if (slideshowState === 'showing') {
       displayImageFull(imgObj, 0, width, height, panFractions.get(imgObj) || 0);
     } else {
-      const tr = getSlideTransform(imgObj);
-      const t = Math.sqrt(slideshowAlpha / 128);
+      // Always animate the CURRENT outgoing image; incoming always snaps in at rest.
+      // For 'reversing', use the target's transform mirrored so the exit direction
+      // is spatially consistent with the forward journey.
+      const targetObj = slideshowState === 'reversing'
+        ? slideshowImages[slideshowTargetIndex] : null;
+      const tr = slideshowState === 'fading-out'
+        ? getSlideTransform(imgObj)
+        : (targetObj ? getSlideTransform(targetObj) : null);
+
       if (tr) {
-        // Transform applied at the same t in both directions: for fading-out t
-        // rises 0→1 (rest→peak), for reversing t falls 1→0 (peak→rest).
+        const t = Math.sqrt(slideshowAlpha / 128);
+        const dir = slideshowState === 'reversing' ? -1 : 1;
         push();
-        translate(width / 2 + tr.dx * width * t, height / 2 + tr.dy * height * t);
+        translate(width / 2 + tr.dx * width * t * dir, height / 2 + tr.dy * height * t * dir);
         scale(1 + tr.scale * t);
         translate(-width / 2, -height / 2);
         displayImageFull(imgObj, 0, width, height, panFractions.get(imgObj) || 0);
         pop();
-      } else if (slideshowState === 'reversing') {
-        displayImageFull(imgObj, 0, width, height, panFractions.get(imgObj) || 0);
-      }
-      // No transform + fading-out: background(0) already holds black for the delay
-      if (slideshowAlpha > 0) {
         push();
         noStroke();
         fill(0, slideshowAlpha);
         rect(0, 0, width, height);
         pop();
       }
+      // No transform: background(0) already shows black for the delay
     }
   }
 
@@ -893,6 +914,7 @@ function startOver() {
   slideshowState = 'idle';
   slideshowAlpha = 0;
   slideshowTransitionStart = null;
+  slideshowTargetIndex = 0;
   slideshowImages = [];
   slideshowIndex = 0;
   if (popup) { popup.remove(); popup = null; }
