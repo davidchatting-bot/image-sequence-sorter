@@ -613,13 +613,13 @@ function defaultTransform(name) {
 }
 
 // Returns the exit transform for imgObj, or null if no transition should play.
-// imageTransforms entries: undefined = not yet saved (use positional default),
-// null = explicitly no transition (e.g. last image loaded from sequence.json).
+// The last image in the show always gets null regardless of what's stored —
+// this ensures old sequence.json files (saved before this rule existed) are
+// also handled correctly.
 function getSlideTransform(imgObj) {
-  const stored = imageTransforms[imgObj.name];
-  if (stored !== undefined) return stored; // null means no transition
-  // Unsaved: last slide in the current show gets no transition
   if (slideshowImages[slideshowImages.length - 1] === imgObj) return null;
+  const stored = imageTransforms[imgObj.name];
+  if (stored !== undefined) return stored;
   return defaultTransform(imgObj.name);
 }
 
