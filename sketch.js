@@ -36,8 +36,9 @@ let pendingFileOps = 0;
 let slideshowMode = false;
 let slideshowImages = [];  // flat ordered list of imgObj, built from sortedGroups on entry
 let slideshowIndex = 0;
-let slideshowAlpha = 0;      // 0=fully visible, 255=black overlay
-let slideshowState = 'idle'; // 'idle' | 'fading-in' | 'showing' | 'fading-out'
+let slideshowAlpha = 0;       // 0=fully visible, 255=black overlay
+let slideshowState = 'idle';  // 'idle' | 'fading-in' | 'showing' | 'fading-out'
+let slideshowFrameCount = 0;  // frames since current slide started, drives Ken Burns transform
 
 // UI Elements
 let popup;
@@ -596,6 +597,7 @@ function handleSlideshowSpace() {
     slideshowIndex = 0;
     slideshowAlpha = 255;
     slideshowState = 'fading-in';
+    slideshowFrameCount = 0;
     slideshowMode = true;
     if (!document.fullscreenElement) document.documentElement.requestFullscreen();
   } else if (slideshowState === 'showing') {
@@ -607,6 +609,7 @@ function exitSlideshow() {
   slideshowMode = false;
   slideshowState = 'idle';
   slideshowAlpha = 0;
+  slideshowFrameCount = 0;
   if (document.fullscreenElement) document.exitFullscreen();
 }
 
@@ -618,33 +621,34 @@ function drawSlideshow() {
       slideshowIndex++;
       if (slideshowIndex >= slideshowImages.length) slideshowIndex = 0;
       slideshowState = 'fading-in';
+      slideshowFrameCount = 0;
     }
   } else if (slideshowState === 'fading-in') {
     slideshowAlpha = max(0, slideshowAlpha - 8);
     if (slideshowAlpha <= 0) slideshowState = 'showing';
   }
+  slideshowFrameCount++;
 
   background(0);
   const imgObj = slideshowImages[slideshowIndex];
   if (imgObj) {
-    // During fade-out, drift + zoom in the direction given by a golden-angle
-    // spread over image indices, so consecutive images move differently —
-    // suggesting spatial relationship between shots.
-    const t = slideshowState === 'fading-out' ? slideshowAlpha / 255 : 0;
-    if (t > 0) {
-      const angle = (slideshowIndex * 137.508) * Math.PI / 180;
-      push();
-      translate(
-        width  / 2 + Math.cos(angle) * 0.04 * width  * t,
-        height / 2 + Math.sin(angle) * 0.02 * height * t
-      );
-      scale(1 + 0.06 * t);
-      translate(-width / 2, -height / 2);
-      displayImageFull(imgObj, 0, width, height, panFractions.get(imgObj) || 0);
-      pop();
-    } else {
-      displayImageFull(imgObj, 0, width, height, panFractions.get(imgObj) || 0);
-    }
+    // Ken Burns: continuous slow drift + zoom from the moment the slide
+    // appears, so the motion is clearly visible while you're looking at the
+    // image and the fade-to-black overlays a still-moving picture.
+    // Direction uses a golden-angle spread over indices so consecutive shots
+    // move differently, suggesting spatial relationship between them.
+    const angle = (slideshowIndex * 137.508) * Math.PI / 180;
+    const drift = Math.min(slideshowFrameCount * 0.00015, 0.06);
+    const zoom  = 1 + Math.min(slideshowFrameCount * 0.0002, 0.08);
+    push();
+    translate(
+      width  / 2 + Math.cos(angle) * drift * width,
+      height / 2 + Math.sin(angle) * drift * height * 0.5
+    );
+    scale(zoom);
+    translate(-width / 2, -height / 2);
+    displayImageFull(imgObj, 0, width, height, panFractions.get(imgObj) || 0);
+    pop();
   }
 
   if (slideshowAlpha > 0) {
@@ -839,6 +843,7 @@ function startOver() {
   slideshowMode = false;
   slideshowState = 'idle';
   slideshowAlpha = 0;
+  slideshowFrameCount = 0;
   slideshowImages = [];
   slideshowIndex = 0;
   if (popup) { popup.remove(); popup = null; }
