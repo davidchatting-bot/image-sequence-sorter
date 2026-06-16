@@ -714,7 +714,7 @@ function drawSlideshow() {
         const dir = slideshowState === 'reversing' ? -1 : 1;
         push();
         translate(width / 2 + tr.dx * width * t * dir, height / 2 + tr.dy * height * t * dir);
-        scale(1 + tr.scale * t);
+        scale(1 + tr.scale * t * dir);
         translate(-width / 2, -height / 2);
         displayImageFull(imgObj, 0, width, height, panFractions.get(imgObj) || 0);
         pop();
