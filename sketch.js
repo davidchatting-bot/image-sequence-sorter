@@ -41,8 +41,9 @@ let pendingFileOps = 0;
 let slideshowMode = false;
 let slideshowImages = [];  // flat ordered list of imgObj, built from sortedGroups on entry
 let slideshowIndex = 0;
-let slideshowAlpha = 0;       // 0=fully visible, 255=black overlay
-let slideshowState = 'idle';  // 'idle' | 'showing' | 'fading-out' | 'reversing'
+let slideshowAlpha = 0;            // 0=fully visible, 128=50% black overlay
+let slideshowState = 'idle';       // 'idle' | 'showing' | 'fading-out' | 'reversing'
+let slideshowTransitionStart = null; // millis() timestamp, for frame-rate-independent timing
 
 // UI Elements
 let popup;
@@ -577,10 +578,9 @@ function keyPressed() {
     toggleFullscreen();
     return;
   }
-  if (keyCode === 32) {
-    handleSlideshowSpace();
-    return;
-  }
+  if (keyCode === 32) { handleSlideshowSpace(); return; }
+  if (key === 'ArrowRight') { handleSlideshowSpace(); return; }
+  if (key === 'ArrowLeft')  { handleSlideshowLeft();  return; }
   if (!currentComparison) return;
 
   if (key === 'a') {
@@ -642,35 +642,38 @@ function handleSlideshowSpace() {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen();
   } else if (slideshowState === 'showing') {
     slideshowState = 'fading-out';
+    slideshowTransitionStart = null;
   }
 }
 
 function handleSlideshowLeft() {
   if (!slideshowMode || slideshowState !== 'showing') return;
   slideshowIndex = (slideshowIndex - 1 + slideshowImages.length) % slideshowImages.length;
-  slideshowAlpha = 128;
   slideshowState = 'reversing';
+  slideshowTransitionStart = null;
 }
 
 function exitSlideshow() {
   slideshowMode = false;
   slideshowState = 'idle';
   slideshowAlpha = 0;
+  slideshowTransitionStart = null;
   if (document.fullscreenElement) document.exitFullscreen();
 }
 
 function drawSlideshow() {
-  // ~2 alpha units/frame at 60fps ≈ 1s transition; same duration in both directions
-  if (slideshowState === 'fading-out') {
-    slideshowAlpha = min(128, slideshowAlpha + 2);
-    if (slideshowAlpha >= 128) {
-      slideshowIndex = (slideshowIndex + 1) % slideshowImages.length;
+  // Wall-clock 1s transitions so duration is frame-rate independent
+  const TRANSITION_MS = 1000;
+  if (slideshowState === 'fading-out' || slideshowState === 'reversing') {
+    if (slideshowTransitionStart === null) slideshowTransitionStart = millis();
+    const progress = min(1, (millis() - slideshowTransitionStart) / TRANSITION_MS);
+    slideshowAlpha = floor(slideshowState === 'fading-out' ? 128 * progress : 128 * (1 - progress));
+    if (progress >= 1) {
+      if (slideshowState === 'fading-out') slideshowIndex = (slideshowIndex + 1) % slideshowImages.length;
       slideshowAlpha = 0;
       slideshowState = 'showing';
+      slideshowTransitionStart = null;
     }
-  } else if (slideshowState === 'reversing') {
-    slideshowAlpha = max(0, slideshowAlpha - 2);
-    if (slideshowAlpha <= 0) slideshowState = 'showing';
   }
 
   background(0);
@@ -889,6 +892,7 @@ function startOver() {
   slideshowMode = false;
   slideshowState = 'idle';
   slideshowAlpha = 0;
+  slideshowTransitionStart = null;
   slideshowImages = [];
   slideshowIndex = 0;
   if (popup) { popup.remove(); popup = null; }
