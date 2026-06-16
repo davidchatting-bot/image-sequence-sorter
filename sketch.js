@@ -7,6 +7,11 @@ let imgObjects = [];
 
 // EXIF/IPTC/XMP metadata for each loaded image, keyed by filename.
 let imageExif = {};
+// Slideshow exit transform per image, keyed by filename. Persisted in
+// sequence.json so transforms survive across sessions. Each entry is
+// { dx, dy, scale } where dx/dy are fractions of canvas size and scale
+// is an additional zoom fraction (e.g. 0.15 = 15% zoom).
+let imageTransforms = {};
 let groups = []; // each group is an array of image objects
 let sortedGroups = [];
 let sortingDone = false;
@@ -38,7 +43,6 @@ let slideshowImages = [];  // flat ordered list of imgObj, built from sortedGrou
 let slideshowIndex = 0;
 let slideshowAlpha = 0;       // 0=fully visible, 255=black overlay
 let slideshowState = 'idle';  // 'idle' | 'fading-in' | 'showing' | 'fading-out'
-let slideshowFrameCount = 0;  // frames since current slide started, drives Ken Burns transform
 
 // UI Elements
 let popup;
@@ -233,6 +237,7 @@ function applyPendingSequence(data) {
         group.push(obj);
         usedNames.add(entry.name);
         if (!imageExif[entry.name]) imageExif[entry.name] = entry.exif || {};
+        if (!imageTransforms[entry.name] && entry.transform) imageTransforms[entry.name] = entry.transform;
       }
     }
     if (group.length) matchedGroups.push(group);
@@ -329,6 +334,7 @@ async function saveSequence(handle) {
   const sequence = sortedGroups.map(group => group.map(obj => ({
     name: obj.name,
     exif: imageExif[obj.name] || {},
+    transform: imageTransforms[obj.name] || defaultTransform(obj.name),
   })));
 
   try {
@@ -590,6 +596,17 @@ function toggleFullscreen() {
   }
 }
 
+// Returns a deterministic default exit transform for an image, derived from
+// its filename so the same image always gets the same transform, even before
+// a sequence.json has been saved. dx/dy are canvas fractions, scale is the
+// additional zoom fraction at full fade (e.g. 0.15 = 15% zoom).
+function defaultTransform(name) {
+  let h = 0;
+  for (const c of name) h = Math.imul(31, h) + c.charCodeAt(0) | 0;
+  const angle = (Math.abs(h) % 360) * Math.PI / 180;
+  return { dx: Math.cos(angle) * 0.08, dy: Math.sin(angle) * 0.04, scale: 0.15 };
+}
+
 function handleSlideshowSpace() {
   if (!slideshowMode) {
     if (!sortingDone || sortedGroups.length === 0) return;
@@ -597,7 +614,6 @@ function handleSlideshowSpace() {
     slideshowIndex = 0;
     slideshowAlpha = 255;
     slideshowState = 'fading-in';
-    slideshowFrameCount = 0;
     slideshowMode = true;
     if (!document.fullscreenElement) document.documentElement.requestFullscreen();
   } else if (slideshowState === 'showing') {
@@ -609,7 +625,6 @@ function exitSlideshow() {
   slideshowMode = false;
   slideshowState = 'idle';
   slideshowAlpha = 0;
-  slideshowFrameCount = 0;
   if (document.fullscreenElement) document.exitFullscreen();
 }
 
@@ -621,34 +636,30 @@ function drawSlideshow() {
       slideshowIndex++;
       if (slideshowIndex >= slideshowImages.length) slideshowIndex = 0;
       slideshowState = 'fading-in';
-      slideshowFrameCount = 0;
     }
   } else if (slideshowState === 'fading-in') {
     slideshowAlpha = max(0, slideshowAlpha - 8);
     if (slideshowAlpha <= 0) slideshowState = 'showing';
   }
-  slideshowFrameCount++;
 
   background(0);
   const imgObj = slideshowImages[slideshowIndex];
   if (imgObj) {
-    // Ken Burns: continuous slow drift + zoom from the moment the slide
-    // appears, so the motion is clearly visible while you're looking at the
-    // image and the fade-to-black overlays a still-moving picture.
-    // Direction uses a golden-angle spread over indices so consecutive shots
-    // move differently, suggesting spatial relationship between them.
-    const angle = (slideshowIndex * 137.508) * Math.PI / 180;
-    const drift = Math.min(slideshowFrameCount * 0.00015, 0.06);
-    const zoom  = 1 + Math.min(slideshowFrameCount * 0.0002, 0.08);
-    push();
-    translate(
-      width  / 2 + Math.cos(angle) * drift * width,
-      height / 2 + Math.sin(angle) * drift * height * 0.5
-    );
-    scale(zoom);
-    translate(-width / 2, -height / 2);
-    displayImageFull(imgObj, 0, width, height, panFractions.get(imgObj) || 0);
-    pop();
+    if (slideshowState === 'fading-out') {
+      // Apply the stored (or default) exit transform, scaled by sqrt(t) so
+      // the motion is clearly visible early in the fade rather than only at
+      // the end when the black overlay already hides it.
+      const t = Math.sqrt(slideshowAlpha / 255);
+      const tr = imageTransforms[imgObj.name] || defaultTransform(imgObj.name);
+      push();
+      translate(width / 2 + tr.dx * width * t, height / 2 + tr.dy * height * t);
+      scale(1 + tr.scale * t);
+      translate(-width / 2, -height / 2);
+      displayImageFull(imgObj, 0, width, height, panFractions.get(imgObj) || 0);
+      pop();
+    } else {
+      displayImageFull(imgObj, 0, width, height, panFractions.get(imgObj) || 0);
+    }
   }
 
   if (slideshowAlpha > 0) {
@@ -827,6 +838,7 @@ function mouseReleased() {
 function startOver() {
   imgObjects = [];
   imageExif = {};
+  imageTransforms = {};
   groups = [];
   sortedGroups = [];
   sortingDone = false;
@@ -843,7 +855,6 @@ function startOver() {
   slideshowMode = false;
   slideshowState = 'idle';
   slideshowAlpha = 0;
-  slideshowFrameCount = 0;
   slideshowImages = [];
   slideshowIndex = 0;
   if (popup) { popup.remove(); popup = null; }
