@@ -79,6 +79,14 @@ function setup() {
   window.addEventListener('dragover', e => e.preventDefault());
   window.addEventListener('drop', onNativeDrop);
 
+  // Arrow keys aren't reliably caught by p5's canvas-level keydown handler
+  // (browsers often intercept them for scrolling first). Listen at the window
+  // level instead and prevent the default scroll behaviour.
+  window.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight') { e.preventDefault(); handleSlideshowSpace(); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); handleSlideshowLeft(); }
+  });
+
   fetch('version.json', { cache: 'no-store' })
     .then(r => r.ok ? r.json() : null)
     .then(data => { if (data && data.deployment) deploymentNumber = data.deployment; })
@@ -569,12 +577,8 @@ function keyPressed() {
     toggleFullscreen();
     return;
   }
-  if (keyCode === 32 || keyCode === RIGHT_ARROW) {
+  if (keyCode === 32) {
     handleSlideshowSpace();
-    return;
-  }
-  if (keyCode === LEFT_ARROW) {
-    handleSlideshowLeft();
     return;
   }
   if (!currentComparison) return;
