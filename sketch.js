@@ -39,7 +39,7 @@ let pendingFileOps = 0;
 
 // Slideshow state (space to play/pause, arrows to step, Esc to exit)
 let slideshowMode = false;
-let slideshowImages = [];  // flat ordered list of imgObj, built from sortedGroups on entry
+let slideshowImages = [];  // one imgObj per group (its representative), built from sortedGroups on entry
 let slideshowIndex = 0;
 let slideshowAlpha = 0;              // 0=fully visible, 128=50% black overlay
 let slideshowState = 'idle';         // 'idle' | 'showing' | 'fading-out' | 'reversing'
@@ -802,7 +802,10 @@ function getSlideTransform(imgObj) {
 function handleSlideshowSpace() {
   if (!slideshowMode) {
     if (!sortingDone || sortedGroups.length === 0) return;
-    slideshowImages = sortedGroups.flatMap(g => g);
+    // One slide per group (its representative first image), matching the
+    // comparison view and final sorted view - not one slide per image, or
+    // a merged (S) group would repeat the same slot several times in a row.
+    slideshowImages = sortedGroups.map(g => g[0]).filter(Boolean);
     slideshowIndex = 0;
     slideshowAlpha = 0;
     slideshowState = 'showing';
