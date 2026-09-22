@@ -339,7 +339,14 @@ async function saveSequence(handle) {
 
   if ((await dirHandle.queryPermission({ mode: 'readwrite' })) !== 'granted') {
     if ((await dirHandle.requestPermission({ mode: 'readwrite' })) !== 'granted') {
-      showResultMessage('Read/write permission for that folder was not granted - sequence.json not saved.');
+      // Permission is the practical "is file access ok?" check - if it's
+      // refused, fall back to the same rename-commands prompt used when the
+      // File System Access API isn't available at all.
+      showRenameCommandsPrompt(
+        `Read/write permission for "${dirHandle.name}" was not granted, so sequence.json couldn't be saved ` +
+        `(${imgObjects.length} image(s)). Copy these commands into a terminal instead, to rename the image ` +
+        `files in sequence order:`
+      );
       return;
     }
   }
@@ -365,6 +372,96 @@ async function saveSequence(handle) {
     console.error('Failed to write sequence.json:', err);
     showResultMessage('Failed to save sequence.json - see console.');
   }
+}
+
+// Escapes `name` for safe use as a single-quoted POSIX shell argument.
+function shQuote(name) {
+  return `'${String(name).replace(/'/g, `'\\''`)}'`;
+}
+
+// Builds a shell script (as plain text) that renames each image on disk to
+// match its position in sortedGroups - the fallback for when sequence.json
+// can't be written directly. Numbering is 1-based and zero-padded; images
+// merged into the same group via S share a number with an a/b/c suffix,
+// since their relative order within the group isn't meaningful.
+//
+// Deliberately doesn't try to strip a previously-applied number prefix
+// before adding a new one (so re-running after already renaming once, or
+// after reordering, stacks another prefix rather than being a no-op) -
+// detecting "our" prefix vs. a genuine leading number in the original
+// filename (e.g. a camera/export date like "20240615_beach.jpg") can't be
+// done reliably, and getting it wrong would silently eat real filename
+// content.
+function generateRenameCommands() {
+  const totalDigits = Math.max(2, String(sortedGroups.length).length);
+  const lines = ['# Run from inside the folder containing these images'];
+  let anyRenames = false;
+
+  sortedGroups.forEach((group, i) => {
+    const num = String(i + 1).padStart(totalDigits, '0');
+    group.forEach((obj, j) => {
+      const suffix = group.length > 1 ? String.fromCharCode(97 + j) : '';
+      const dot = obj.name.lastIndexOf('.');
+      const ext = dot > 0 ? obj.name.slice(dot) : '';
+      const base = dot > 0 ? obj.name.slice(0, dot) : obj.name;
+      const newName = `${num}${suffix}_${base}${ext}`;
+      if (newName !== obj.name) {
+        anyRenames = true;
+        lines.push(`mv -n -- ${shQuote(obj.name)} ${shQuote(newName)}`);
+      }
+    });
+  });
+
+  if (!anyRenames) lines.push('# Files are already named in sequence order - nothing to rename.');
+  return lines.join('\n');
+}
+
+// Shows a dismissible pop-up with a copy-pasteable shell script that renames
+// the images to match the sorted order - used when sequence.json can't be
+// written directly (no File System Access API, or permission was refused).
+// Text is set via textContent throughout, not innerHTML: `introMessage` can
+// carry a folder name, and filenames are attacker-controlled input.
+function showRenameCommandsPrompt(introMessage) {
+  if (popup) { popup.remove(); popup = null; }
+
+  const commands = generateRenameCommands();
+
+  popup = createDiv('');
+  popup.id('popup');
+  popup.addClass('rename-popup');
+
+  const msg = introMessage ||
+    `Sorting complete (${imgObjects.length} image(s)). This browser can't save files directly - ` +
+    `copy these commands into a terminal, from inside the folder containing the images, to rename them in sequence order:`;
+  const p = createElement('p');
+  p.parent(popup);
+  p.elt.textContent = msg;
+
+  const pre = createElement('pre');
+  pre.parent(popup);
+  const code = createElement('code');
+  code.parent(pre);
+  code.elt.textContent = commands;
+
+  const btnRow = createDiv('');
+  btnRow.parent(popup);
+
+  const copyBtn = createButton('Copy to clipboard');
+  copyBtn.parent(btnRow);
+  copyBtn.mousePressed(async () => {
+    try {
+      await navigator.clipboard.writeText(commands);
+      copyBtn.elt.textContent = 'Copied!';
+      setTimeout(() => { if (copyBtn.elt) copyBtn.elt.textContent = 'Copy to clipboard'; }, 1500);
+    } catch (err) {
+      console.error('Clipboard write failed:', err);
+      copyBtn.elt.textContent = 'Copy failed - select the text manually';
+    }
+  });
+
+  const closeBtn = createButton('Close');
+  closeBtn.parent(btnRow);
+  closeBtn.mousePressed(() => { popup.remove(); popup = null; });
 }
 
 // Shows a dismissible pop-up with a message (e.g. the outcome of
@@ -538,7 +635,13 @@ function nextComparison() {
 function finishSorting() {
   sortingDone = true;
   currentComparison = null;
-  if (fsAccessSupported && sequenceDirty) showSavePrompt();
+  if (fsAccessSupported) {
+    if (sequenceDirty) showSavePrompt();
+  } else {
+    // No File System Access API in this browser - sequence.json can't be
+    // written directly, so offer shell commands to rename the files instead.
+    showRenameCommandsPrompt();
+  }
 }
 
 // Chrome only allows showDirectoryPicker() to be called from a click (a

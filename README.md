@@ -84,8 +84,15 @@ Loading only ever requests read access to the folder; if you then save, the
 save pop-up's button click is what prompts for the extra write access needed
 to create/overwrite `sequence.json`.
 
-In other browsers, sorting still works but `sequence.json` can't be read or
-saved - use a Chromium-based browser for that.
+### Renaming the files (other browsers, or if permission is refused)
+
+In browsers without the File System Access API, or if read/write permission
+for the folder is refused, sorting still works but `sequence.json` can't be
+read or saved. Once sorting completes, a pop-up instead shows a shell
+script - one `mv` command per image that needs renaming, numbered to match
+the sorted order (images merged with **S** share a number with an a/b/c
+suffix) - with a button to copy it to the clipboard. Paste it into a
+terminal opened in the images' folder to rename the files directly.
 
 ### Installing as a desktop app
 
