@@ -416,26 +416,18 @@ function generateRenameCommands() {
   return lines.join('\n');
 }
 
-// Shows a dismissible pop-up with a copy-pasteable shell script that renames
-// the images to match the sorted order - used when sequence.json can't be
-// written directly (no File System Access API, or permission was refused).
-// Text is set via textContent throughout, not innerHTML: `introMessage` can
-// carry a folder name, and filenames are attacker-controlled input.
-function showRenameCommandsPrompt(introMessage) {
-  if (popup) { popup.remove(); popup = null; }
-
+// Appends the intro paragraph, mv-commands code block, and "Copy to
+// clipboard" button to the current `popup` (which must already exist) -
+// shared by showFinishPrompt() and showRenameCommandsPrompt(). Text is set
+// via textContent throughout, not innerHTML: `introMessage` can carry a
+// folder name, and filenames are attacker-controlled input. Returns the
+// button row so callers can add further buttons to it.
+function appendRenameCommandsBlock(introMessage) {
   const commands = generateRenameCommands();
 
-  popup = createDiv('');
-  popup.id('popup');
-  popup.addClass('rename-popup');
-
-  const msg = introMessage ||
-    `Sorting complete (${imgObjects.length} image(s)). This browser can't save files directly - ` +
-    `copy these commands into a terminal, from inside the folder containing the images, to rename them in sequence order:`;
   const p = createElement('p');
   p.parent(popup);
-  p.elt.textContent = msg;
+  p.elt.textContent = introMessage;
 
   const pre = createElement('pre');
   pre.parent(popup);
@@ -458,6 +450,25 @@ function showRenameCommandsPrompt(introMessage) {
       copyBtn.elt.textContent = 'Copy failed - select the text manually';
     }
   });
+
+  return btnRow;
+}
+
+// Shows a dismissible pop-up with just the copy-pasteable rename script -
+// used when sequence.json can't be written directly (permission was
+// refused mid-save; see saveSequence()). The normal end-of-sort pop-up is
+// showFinishPrompt(), which always includes this same block.
+function showRenameCommandsPrompt(introMessage) {
+  if (popup) { popup.remove(); popup = null; }
+
+  popup = createDiv('');
+  popup.id('popup');
+  popup.addClass('rename-popup');
+
+  const msg = introMessage ||
+    `Sorting complete (${imgObjects.length} image(s)). Copy these commands into a terminal, from inside the ` +
+    `folder containing the images, to rename them in sequence order:`;
+  const btnRow = appendRenameCommandsBlock(msg);
 
   const closeBtn = createButton('Close');
   closeBtn.parent(btnRow);
@@ -635,44 +646,52 @@ function nextComparison() {
 function finishSorting() {
   sortingDone = true;
   currentComparison = null;
-  if (fsAccessSupported) {
-    if (sequenceDirty) showSavePrompt();
-  } else {
-    // No File System Access API in this browser - sequence.json can't be
-    // written directly, so offer shell commands to rename the files instead.
-    showRenameCommandsPrompt();
-  }
+  showFinishPrompt();
 }
 
-// Chrome only allows showDirectoryPicker() to be called from a click (a
-// keypress here doesn't count), so we can't pop it open directly once
-// sorting finishes via a key. Instead, show a small pop-up with a single
-// button - clicking it is the click that opens the real folder picker.
-function showSavePrompt() {
-  if (popup) return;
+// Always shows the copy-pasteable rename script - that's the one output
+// every browser can produce. Where the File System Access API is available
+// and there's something new to save, it also offers a "Save sequence.json"
+// button alongside it, in the same pop-up. Chrome only allows
+// showDirectoryPicker() to be called from a click (a keypress here doesn't
+// count), which is why sorting finishing via a keystroke can't open it
+// directly - the button click is what's allowed to.
+function showFinishPrompt() {
+  if (popup) { popup.remove(); popup = null; }
 
   popup = createDiv('');
   popup.id('popup');
+  popup.addClass('rename-popup');
 
-  const closePrompt = () => { popup.remove(); popup = null; };
+  const msg = `Sorting complete (${imgObjects.length} image(s)). Copy these commands into a terminal, from inside ` +
+    `the folder containing the images, to rename them in sequence order:`;
+  const btnRow = appendRenameCommandsBlock(msg);
 
-  if (rememberedDirHandle) {
-    popup.html(`<p>Sorting complete. Save sequence.json (${imgObjects.length} image(s)) to "${rememberedDirHandle.name}"?</p>`);
+  if (fsAccessSupported && sequenceDirty) {
+    // Deliberately doesn't closePrompt() before/around these calls -
+    // saveSequence() replaces `popup` itself once it has an outcome to show
+    // (success, permission refused), and does nothing to it if the folder
+    // picker is simply cancelled, which correctly leaves this pop-up (and
+    // its commands) exactly as it was rather than vanishing with no result.
+    if (rememberedDirHandle) {
+      const saveBtn = createButton('');
+      saveBtn.parent(btnRow);
+      saveBtn.elt.textContent = `Also save sequence.json to "${rememberedDirHandle.name}"`;
+      saveBtn.mousePressed(() => saveSequence(rememberedDirHandle));
 
-    const btn = createButton(`Save to "${rememberedDirHandle.name}"`);
-    btn.parent(popup);
-    btn.mousePressed(() => { saveSequence(rememberedDirHandle); closePrompt(); });
-
-    const otherBtn = createButton('Choose a different folder');
-    otherBtn.parent(popup);
-    otherBtn.mousePressed(() => { saveSequence(null); closePrompt(); });
-  } else {
-    popup.html(`<p>Sorting complete. Save sequence.json (${imgObjects.length} image(s)) to a folder?</p>`);
-
-    const btn = createButton('Save sequence.json');
-    btn.parent(popup);
-    btn.mousePressed(() => { saveSequence(null); closePrompt(); });
+      const otherBtn = createButton('Choose a different folder to save sequence.json too');
+      otherBtn.parent(btnRow);
+      otherBtn.mousePressed(() => saveSequence(null));
+    } else {
+      const saveBtn = createButton('Also save sequence.json...');
+      saveBtn.parent(btnRow);
+      saveBtn.mousePressed(() => saveSequence(null));
+    }
   }
+
+  const closeBtn = createButton('Close');
+  closeBtn.parent(btnRow);
+  closeBtn.mousePressed(() => { popup.remove(); popup = null; });
 }
 
 function keyPressed() {

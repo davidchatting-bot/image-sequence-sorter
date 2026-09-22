@@ -32,11 +32,20 @@ Then sort with:
   through all images in sequence order with a fade between each; press Space to
   advance, Esc to exit back to the sorted view
 
-### Saving the sequence (Chromium browsers)
+### When sorting finishes
 
-In browsers that support the File System Access API (Chrome, Edge, etc.), as
-soon as sorting is complete a small pop-up appears with a "Save
-sequence.json" button (browsers only allow the folder picker itself to be
+As soon as sorting is complete, a pop-up shows a shell script - one `mv`
+command per image that needs renaming, numbered to match the sorted order
+(images merged with **S** share a number with an a/b/c suffix) - with a
+button to copy it to the clipboard. Paste it into a terminal opened in the
+images' folder to rename the files directly. This always appears, in every
+browser, whether or not `sequence.json` can also be saved.
+
+### Also saving sequence.json (Chromium browsers)
+
+In browsers that support the File System Access API (Chrome, Edge, etc.),
+the same pop-up also offers a "Save sequence.json" button whenever there's
+something new to save (browsers only allow the folder picker itself to be
 opened from a click, not a keypress, so this one click is needed). Clicking
 it prompts you to pick the folder the images came from and grant read/write
 access, then writes (or overwrites) a `sequence.json` file there.
@@ -81,18 +90,11 @@ folder already has granted permission, this happens with no pop-up at all -
 the images load straight away.
 
 Loading only ever requests read access to the folder; if you then save, the
-save pop-up's button click is what prompts for the extra write access needed
-to create/overwrite `sequence.json`.
-
-### Renaming the files (other browsers, or if permission is refused)
-
-In browsers without the File System Access API, or if read/write permission
-for the folder is refused, sorting still works but `sequence.json` can't be
-read or saved. Once sorting completes, a pop-up instead shows a shell
-script - one `mv` command per image that needs renaming, numbered to match
-the sorted order (images merged with **S** share a number with an a/b/c
-suffix) - with a button to copy it to the clipboard. Paste it into a
-terminal opened in the images' folder to rename the files directly.
+"Save sequence.json" button click is what prompts for the extra write access
+needed to create/overwrite `sequence.json`. In browsers without the File
+System Access API, or if that write access is refused, `sequence.json` can't
+be read or saved at all - but sorting, and the rename-commands pop-up above,
+work regardless.
 
 ### Installing as a desktop app
 
