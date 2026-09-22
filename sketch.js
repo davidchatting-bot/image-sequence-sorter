@@ -1121,7 +1121,17 @@ function addImage(file) {
   if (typeof exifr !== 'undefined' && exifr.parse) {
     exifr.parse(f, { tiff: true, exif: true, iptc: true, xmp: true, icc: false, jfif: false, ihdr: false })
       .then(exif => { imageExif[f.name] = JSON.parse(JSON.stringify(exif || {})); })
-      .catch(err => console.error('EXIF parse error for', f.name, err));
+      .catch(err => {
+        // Non-fatal: the image itself still loads/sorts/saves fine via the
+        // loadImage() call above, which is independent of this. This just
+        // means imageExif[f.name] stays unset, which every reader already
+        // treats as "no metadata" (saveSequence, applyPendingSequence both
+        // fall back to {}). exifr sniffs real file bytes, not the
+        // extension, so this can happen for a format/variant it doesn't
+        // recognise (e.g. some WebP files) - console.warn rather than
+        // .error since nothing has actually failed for the user.
+        console.warn('No EXIF metadata read for', f.name, '-', err.message || err);
+      });
   }
 
   // While a dropped folder's sequence.json is still being checked/applied,
