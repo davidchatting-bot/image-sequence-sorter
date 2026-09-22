@@ -1101,6 +1101,18 @@ function addImage(file) {
     console.error("Not a valid File object:", file);
     return;
   }
+  // Skip OS metadata/sidecar files - e.g. macOS ".DS_Store", or the
+  // "._name.jpg" AppleDouble resource-fork files Finder creates alongside
+  // real files when they pass through a non-HFS+ filesystem (a USB drive, a
+  // network share, a zip made on a Mac). File managers hide these by
+  // convention, but a dropped folder's directory listing (traverseEntry)
+  // reads every entry regardless, and their extension still gets them a
+  // browser-assigned image/* type - without this check they'd be added as
+  // broken images that fail to decode and fail EXIF parsing.
+  if (f.name.startsWith('.')) {
+    console.log('Skipped hidden/metadata file:', f.name);
+    return;
+  }
   let blobURL = URL.createObjectURL(f);
   let img = loadImage(blobURL, () => URL.revokeObjectURL(blobURL));
   let obj = { img, name: f.name };
