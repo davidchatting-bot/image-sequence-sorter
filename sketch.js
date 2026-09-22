@@ -382,8 +382,9 @@ function shQuote(name) {
 // Builds a shell script (as plain text) that renames each image on disk to
 // match its position in sortedGroups - the fallback for when sequence.json
 // can't be written directly. Numbering is 1-based and zero-padded; images
-// merged into the same group via S share a number with an a/b/c suffix,
-// since their relative order within the group isn't meaningful.
+// merged into the same group via S share the same number - no extra suffix
+// to tell them apart within it, since the (already-unique) original
+// filename that follows the number already does that.
 //
 // Deliberately doesn't try to strip a previously-applied number prefix
 // before adding a new one (so re-running after already renaming once, or
@@ -399,12 +400,11 @@ function generateRenameCommands() {
 
   sortedGroups.forEach((group, i) => {
     const num = String(i + 1).padStart(totalDigits, '0');
-    group.forEach((obj, j) => {
-      const suffix = group.length > 1 ? String.fromCharCode(97 + j) : '';
+    group.forEach((obj) => {
       const dot = obj.name.lastIndexOf('.');
       const ext = dot > 0 ? obj.name.slice(dot) : '';
       const base = dot > 0 ? obj.name.slice(0, dot) : obj.name;
-      const newName = `${num}${suffix}_${base}${ext}`;
+      const newName = `${num}_${base}${ext}`;
       if (newName !== obj.name) {
         anyRenames = true;
         lines.push(`mv -n -- ${shQuote(obj.name)} ${shQuote(newName)}`);

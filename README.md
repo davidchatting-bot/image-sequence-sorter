@@ -36,10 +36,11 @@ Then sort with:
 
 As soon as sorting is complete, a pop-up shows a shell script - one `mv`
 command per image that needs renaming, numbered to match the sorted order
-(images merged with **S** share a number with an a/b/c suffix) - with a
-button to copy it to the clipboard. Paste it into a terminal opened in the
-images' folder to rename the files directly. This always appears, in every
-browser, whether or not `sequence.json` can also be saved.
+(images merged with **S** share the same number, since their original
+filenames already tell them apart) - with a button to copy it to the
+clipboard. Paste it into a terminal opened in the images' folder to rename
+the files directly. This always appears, in every browser, whether or not
+`sequence.json` can also be saved.
 
 ### Also saving sequence.json (Chromium browsers)
 
