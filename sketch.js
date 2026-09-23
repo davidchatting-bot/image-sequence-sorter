@@ -379,12 +379,14 @@ function shQuote(name) {
   return `'${String(name).replace(/'/g, `'\\''`)}'`;
 }
 
-// Builds a shell script (as plain text) that renames each image on disk to
+// Builds a shell command (as plain text) that renames each image on disk to
 // match its position in sortedGroups - the fallback for when sequence.json
 // can't be written directly. Numbering is 1-based and zero-padded; images
 // merged into the same group via S share the same number - no extra suffix
 // to tell them apart within it, since the (already-unique) original
-// filename that follows the number already does that.
+// filename that follows the number already does that. Every `mv` is joined
+// with "; " onto a single line after the leading comment, so the whole
+// rename is one copy-paste rather than a line-by-line block.
 //
 // Deliberately doesn't try to strip a previously-applied number prefix
 // before adding a new one (so re-running after already renaming once, or
@@ -395,8 +397,7 @@ function shQuote(name) {
 // content.
 function generateRenameCommands() {
   const totalDigits = Math.max(2, String(sortedGroups.length).length);
-  const lines = ['# Run from inside the folder containing these images'];
-  let anyRenames = false;
+  const mvCommands = [];
 
   sortedGroups.forEach((group, i) => {
     const num = String(i + 1).padStart(totalDigits, '0');
@@ -406,14 +407,15 @@ function generateRenameCommands() {
       const base = dot > 0 ? obj.name.slice(0, dot) : obj.name;
       const newName = `${num}_${base}${ext}`;
       if (newName !== obj.name) {
-        anyRenames = true;
-        lines.push(`mv -n -- ${shQuote(obj.name)} ${shQuote(newName)}`);
+        mvCommands.push(`mv -n -- ${shQuote(obj.name)} ${shQuote(newName)}`);
       }
     });
   });
 
-  if (!anyRenames) lines.push('# Files are already named in sequence order - nothing to rename.');
-  return lines.join('\n');
+  const secondLine = mvCommands.length
+    ? mvCommands.join('; ')
+    : '# Files are already named in sequence order - nothing to rename.';
+  return `# Run from inside the folder containing these images\n${secondLine}`;
 }
 
 // Appends the intro paragraph, mv-commands code block, and "Copy to
